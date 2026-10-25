@@ -52,8 +52,10 @@ void fragment() {
 	vec3 base = mix(raw_color * (0.82 + 0.36 * m), fat_color, clamp(streak * marbling * 1.3, 0.0, 1.0));
 	float s;
 	float mk;
-	if (ny > 0.5) { s = sear_top; mk = mark_top; }
-	else if (ny < -0.5) { s = sear_bottom; mk = mark_bottom; }
+	// 網に当たっていない面も、中まで火が通るにつれて色が変わる
+	float through = core * 0.62;
+	if (ny > 0.5) { s = max(sear_top, through); mk = mark_top; }
+	else if (ny < -0.5) { s = max(sear_bottom, through); mk = mark_bottom; }
 	else { s = max(core * 0.85, max(sear_top, sear_bottom) * 0.55); mk = 0.0; }
 	vec3 col = cooked(base, s, m);
 	float stripe = smoothstep(0.82, 0.97, abs(sin(lp.x * 262.0)));

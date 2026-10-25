@@ -56,7 +56,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		cam.rotation.x = clampf(cam.rotation.x - e.relative.y * sens, -1.45, 1.45)
 	elif e is InputEventMouseButton and e.pressed:
 		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+			if not Game.hud.ticket_open():
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
 		match e.button_index:
 			MOUSE_BUTTON_LEFT:

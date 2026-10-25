@@ -42,9 +42,11 @@ func _process(dt: float) -> void:
 					me.container = null
 					p.pick(me)
 					g.primary(p, g.to_global(offs[i] + Vector3(0, 0.2, 0)), Vector3.UP)
-					me.sear = [[0.0, 0.0], [0.6, 0.2], [0.9, 0.7], [0.3, 0.0], [1.3, 0.8]][i]
-					me.core = [0.0, 0.4, 0.8, 0.2, 1.1][i]
+					if i >= 3:
+						me.sear = [[0.3, 0.0], [1.3, 0.8]][i - 3]
+						me.core = [0.2, 1.1][i - 3]
 					me.flipped = false
+				Engine.time_scale = 8.0
 				var pl := Plate.new()
 				m.items_root.add_child(pl)
 				pl.global_position = g.global_position + Vector3(0.45, 0.0, 0.05)
@@ -56,10 +58,18 @@ func _process(dt: float) -> void:
 				p.rotation.y = PI
 				p.cam.rotation.x = -0.75
 				m.open_shop()
+				var tb: DiningTable = m.tables[1]
+				var pt := TableParty.new().setup(tb, 4, m.door_pos)
+				m.add_child(pt)
+				tb.party = pt
+				for i in 4:
+					pt.members[i].position = tb.chairs[i]
+					pt.members[i].path.clear()
 				step = 1
 				t = 0
 		1:
-			if t > 4.0:
+			if t > 40.0:
+				Engine.time_scale = 1.0
 				_shot("grill_close")
 				p.global_position = Vector3(-1.6, 0.05, -1.75)
 				p.cam.rotation.x = -1.3
@@ -76,8 +86,8 @@ func _process(dt: float) -> void:
 		5:
 			if t > 1.0:
 				_shot("counter_view")
-				p.global_position = Vector3(4.0, 0.05, -2.0)
-				p.rotation.y = PI * 0.75
+				p.global_position = Vector3(2.6, 0.05, 0.3)
+				p.rotation.y = PI * 0.85
 				p.cam.rotation.x = -0.15
 				step = 3
 				t = 0

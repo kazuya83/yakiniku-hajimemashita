@@ -9,6 +9,9 @@ var hud: Hud
 var env: Environment
 var grills: Array[Grill] = []
 var seats: Array[Seat] = []
+var tables: Array[DiningTable] = []
+var _parties: Array[TableParty] = []
+var dirty_dishes := 0
 var shadow_lights: Array[Light3D] = []
 var sign_board: OpenSign
 var door_pos := Vector3(4.6, 0, 4.1)
@@ -128,12 +131,23 @@ func _process(dt: float) -> void:
 			phase = "closing"
 			sign_board.refresh()
 			Game.say("閉店時間！残ったお客さんを見送ろう")
-	elif phase == "closing" and _customers.is_empty():
+	elif phase == "closing" and _customers.is_empty() and _parties.is_empty():
 		_show_summary()
 	_update_status()
 
 
 func _spawn_customer() -> void:
+	var free_tables: Array[DiningTable] = []
+	for t in tables:
+		if t.party == null and t.is_clean():
+			free_tables.append(t)
+	if not free_tables.is_empty() and randf() < 0.55:
+		var t: DiningTable = free_tables.pick_random()
+		var pt := TableParty.new().setup(t, randi_range(2, 4), door_pos)
+		add_child(pt)
+		t.party = pt
+		_parties.append(pt)
+		return
 	var free: Array[Seat] = []
 	for s in seats:
 		if s.customer == null:
@@ -142,7 +156,6 @@ func _spawn_customer() -> void:
 		return
 	var s: Seat = free.pick_random()
 	var c := Customer.new().setup(s, MeatData.ORDER.pick_random(), randi_range(2, 3), door_pos)
-	c.position = door_pos
 	add_child(c)
 	s.customer = c
 	_customers.append(c)
@@ -150,6 +163,10 @@ func _spawn_customer() -> void:
 
 func customer_left(c: Customer) -> void:
 	_customers.erase(c)
+
+
+func party_left(p: TableParty) -> void:
+	_parties.erase(p)
 
 
 func record_visit(pay: int, stars: float) -> void:
@@ -173,6 +190,15 @@ func _update_status() -> void:
 		var c := seats[i].customer
 		if c and c.is_seated():
 			lines.append("カウンター%d: %s（%d/%d）" % [i + 1, c.order_text(), c.eaten, c.count])
+	for t in tables:
+		if t.party and t.party.state != "walk_in":
+			var pt := t.party
+			var line := "テーブル%d: %s" % [t.index, pt.status_text()]
+			if not pt.ticket.is_empty():
+				line += "\n　伝票: " + pt.ticket_text()
+			lines.append(line)
+		elif t.party == null and not t.is_clean():
+			lines.append("テーブル%d: 皿を下げてください" % t.index)
 	hud.set_orders("\n".join(lines))
 
 

@@ -113,11 +113,89 @@ func _process(dt: float) -> void:
 				sink.primary(p, sink.global_position, Vector3.UP)
 				g.primary(p, g.global_position, Vector3.UP)
 				_ok(g.grate == gr, "網を戻す")
-				step = 5
+				step = 10
 				t = 0
 			elif t > 120:
 				_ok(false, "お客さんが帰らない state=" + c.state)
 				get_tree().quit()
+		10:
+			var tb: DiningTable = m.tables[0]
+			var pt := TableParty.new().setup(tb, 2, m.door_pos)
+			m.add_child(pt)
+			tb.party = pt
+			m._parties.append(pt)
+			set_meta("pt", pt)
+			step = 11
+			t = 0
+		11:
+			var pt: TableParty = get_meta("pt")
+			if pt.state == "call_order":
+				_ok(true, "テーブル客が座って注文を呼ぶ")
+				pt.on_use(p)
+				_ok(Game.hud.ticket_open(), "伝票が開く: " + pt.order_text())
+				Game.hud._ticket_add(pt.order.keys()[0], 1)
+				Game.hud._close_ticket()
+				_ok(not pt.ticket.is_empty(), "伝票に書ける: " + pt.ticket_text())
+				var fr: Fridge
+				for n in m.get_node("Shop").get_children():
+					if n is Fridge:
+						fr = n
+				for c in pt.order:
+					for k in pt.order[c]:
+						fr.selected = MeatData.ORDER.find(c)
+						fr.use(p)
+						pt.table.primary(p, pt.table.global_position, Vector3.UP)
+				_ok(pt.state == "eating", "皿を出すと焼き始める")
+				set_meta("money1", Game.money)
+				step = 12
+				t = 0
+			elif t > 120:
+				_ok(false, "テーブル客が注文しない state=" + pt.state)
+				get_tree().quit()
+		12:
+			var pt: TableParty = get_meta("pt")
+			if is_instance_valid(pt) and pt.state == "call_order":
+				pt.on_use(p)
+				Game.hud._close_ticket()
+				for c in pt.order:
+					var need: int = pt.order[c] - pt.delivered.get(c, 0)
+					for k in need:
+						var fr: Fridge
+						for n in m.get_node("Shop").get_children():
+							if n is Fridge:
+								fr = n
+						fr.selected = MeatData.ORDER.find(c)
+						fr.use(p)
+						pt.table.primary(p, pt.table.global_position, Vector3.UP)
+				print("  追加注文: ", pt.order_text())
+			if is_instance_valid(pt) and pt.need == "grate":
+				print("  網交換の依頼")
+				pt.table.grill.grate.dirt = 0.0
+			if is_instance_valid(pt) and pt.state == "call_bill":
+				print("  食べた枚数 ", pt.eaten, " 平均 ", pt._food_score())
+				pt.on_use(p)
+				_ok(Game.money > get_meta("money1"), "テーブルのお会計: " + Game.yen(Game.money - get_meta("money1")))
+				step = 13
+				t = 0
+			elif t > 900:
+				_ok(false, "テーブル客が食べ終わらない state=" + (pt.state if is_instance_valid(pt) else "freed"))
+				get_tree().quit()
+		13:
+			var tb: DiningTable = m.tables[0]
+			if t > 30:
+				_ok(not tb.is_clean(), "帰ったあと皿が残る")
+				var sink: Sink
+				for n in m.get_node("Shop").get_children():
+					if n is Sink:
+						sink = n
+				for pl in tb.plates.duplicate():
+					pl.primary(p, pl.global_position, Vector3.UP)
+					if not p.held.meats.is_empty():
+						p.held.meats.clear()
+					sink.primary(p, sink.global_position, Vector3.UP)
+				_ok(tb.is_clean(), "皿を下げる (洗い物 %d)" % m.dirty_dishes)
+				step = 5
+				t = 0
 		5:
 			m.day_time = m.day_length
 			for s in m.seats:

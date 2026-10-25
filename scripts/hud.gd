@@ -15,6 +15,11 @@ var _summary: PanelContainer
 var _summary_label: Label
 var _orders: Label
 var _start: PanelContainer
+var _ticket: PanelContainer
+var _ticket_title: Label
+var _ticket_counts := {}
+var _ticket_labels := {}
+var _ticket_party: TableParty
 
 
 func _ready() -> void:
@@ -69,6 +74,7 @@ func _ready() -> void:
 
 	_build_pause(root)
 	_build_summary(root)
+	_build_ticket(root)
 	_build_start(root)
 	Game.toast.connect(show_toast)
 
@@ -162,6 +168,82 @@ func _build_start(root: Control) -> void:
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	b.grab_focus.call_deferred()
+
+
+func _build_ticket(root: Control) -> void:
+	_ticket = PanelContainer.new()
+	_ticket.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+	_ticket.position = Vector2(30, -200)
+	_ticket.custom_minimum_size = Vector2(360, 0)
+	var sb := _box(Color(0.96, 0.94, 0.86, 0.97))
+	_ticket.add_theme_stylebox_override("panel", sb)
+	root.add_child(_ticket)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	_ticket.add_child(v)
+	_ticket_title = Label.new()
+	_ticket_title.add_theme_font_size_override("font_size", 26)
+	_ticket_title.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
+	v.add_child(_ticket_title)
+	var note := Label.new()
+	note.text = "聞いた注文を書きこもう（皿の数）"
+	note.add_theme_font_size_override("font_size", 17)
+	note.add_theme_color_override("font_color", Color(0.35, 0.3, 0.25))
+	v.add_child(note)
+	for c in MeatData.ORDER:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		v.add_child(h)
+		var n := Label.new()
+		n.text = MeatData.CUTS[c].name
+		n.custom_minimum_size = Vector2(120, 0)
+		n.add_theme_font_size_override("font_size", 22)
+		n.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
+		h.add_child(n)
+		h.add_child(_button("－", func(): _ticket_add(c, -1)))
+		var cnt := Label.new()
+		cnt.custom_minimum_size = Vector2(40, 0)
+		cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cnt.add_theme_font_size_override("font_size", 24)
+		cnt.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
+		h.add_child(cnt)
+		_ticket_labels[c] = cnt
+		h.add_child(_button("＋", func(): _ticket_add(c, 1)))
+	v.add_child(_button("書けた", func(): _close_ticket()))
+	_ticket.visible = false
+
+
+func open_ticket(party: TableParty) -> void:
+	_ticket_party = party
+	_ticket_counts = {}
+	for c in MeatData.ORDER:
+		_ticket_counts[c] = 0
+		_ticket_labels[c].text = "0"
+	_ticket_title.text = "伝票　テーブル%d" % party.table.index
+	_ticket.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _ticket_add(c: String, d: int) -> void:
+	_ticket_counts[c] = clampi(_ticket_counts[c] + d, 0, 9)
+	_ticket_labels[c].text = str(_ticket_counts[c])
+
+
+func _close_ticket() -> void:
+	if is_instance_valid(_ticket_party):
+		var t := {}
+		for c in _ticket_counts:
+			if _ticket_counts[c] > 0:
+				t[c] = _ticket_party.ticket.get(c, 0) + _ticket_counts[c]
+			elif _ticket_party.ticket.has(c):
+				t[c] = _ticket_party.ticket[c]
+		_ticket_party.ticket = t
+	_ticket.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func ticket_open() -> bool:
+	return _ticket.visible
 
 
 func _begin() -> void:

@@ -22,14 +22,14 @@ func _cut() -> String:
 
 
 func _cost() -> int:
-	return int(MeatData.CUTS[_cut()].price * 0.3) * 4
+	return int(MeatData.CUTS[_cut()].price * 0.35 / 10.0) * 10
 
 
 func get_hint(p: Player) -> String:
 	var d: Dictionary = MeatData.CUTS[_cut()]
 	var t := "冷蔵庫　＜ %s ＞" % d.name
 	if p.held == null:
-		t += "\n左クリック / E: %s 4枚を皿で出す（仕入れ値 %s）" % [d.name, Game.yen(_cost())]
+		t += "\n左クリック / E: %s 1皿（4枚）を出す（仕入れ値 %s）" % [d.name, Game.yen(_cost())]
 	else:
 		t += "\n手をあけてから取り出す"
 	t += "\nホイール: 部位を変える"

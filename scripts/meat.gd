@@ -55,9 +55,9 @@ func cook(dt: float, h: float, dirt: float) -> void:
 		h *= 0.3
 	h = maxf(h, 0.0)
 	var down := 0 if flipped else 1
-	sear[down] += h * data.sear_k * 0.026 * dt * (1.0 + dirt * 0.6)
+	sear[down] += h * data.sear_k * 0.034 * dt * (1.0 + dirt * 0.6)
 	sear[1 - down] += h * 0.0025 * dt
-	core += h * 0.0145 * (0.008 / data.t) * dt
+	core += h * 0.018 * (0.008 / data.t) * dt
 	last_drip = 0.0
 	if fat > 0.02 and core > 0.12:
 		var d: float = h * 0.012 * data.fat * dt

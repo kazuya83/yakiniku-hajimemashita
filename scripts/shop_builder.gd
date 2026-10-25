@@ -112,19 +112,17 @@ static func _build_kitchen(main, root: Node3D, wood_m: Material) -> void:
 
 static func _build_tables(main, root: Node3D, wood_m: Material, dark_wood: Material) -> void:
 	var steel := Build.mat(Color(0.75, 0.76, 0.78), 0.3, 1.0)
+	var idx := 1
 	for tx in [-3.4, 0.4]:
-		var tz := 2.6
-		Build.box(root, Vector3(1.3, 0.06, 0.85), Vector3(tx, 0.72, tz), wood_m)
-		Build.box(root, Vector3(1.1, 0.69, 0.65), Vector3(tx, 0.345, tz), dark_wood)
-		var g := Grill.new()
-		g.title = "テーブルの七輪"
-		g.position = Vector3(tx, 0.75, tz)
-		root.add_child(g)
-		main.grills.append(g)
-		_duct(root, Vector3(tx, 0.75 + 0.75, tz), steel)
-		for dx in [-0.35, 0.35]:
-			for dz in [-0.75, 0.75]:
-				Build.box(root, Vector3(0.42, 0.45, 0.42), Vector3(tx + dx, 0.225, tz + dz), dark_wood)
+		var t := DiningTable.new()
+		t.index = idx
+		t.position = Vector3(tx, 0, 2.6)
+		root.add_child(t)
+		t.build(wood_m, dark_wood, steel)
+		main.tables.append(t)
+		main.grills.append(t.grill)
+		_duct(root, Vector3(tx, 0.75 + 0.75, 2.6), steel)
+		idx += 1
 	# お品書き
 	var menu := "おしながき\n\n"
 	for c in MeatData.ORDER:

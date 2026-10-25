@@ -56,6 +56,8 @@ func get_hint(p: Player) -> String:
 			t += "\n左クリック: 網を取り出す"
 	elif p.held is Grate:
 		t += "\n左クリック: 網を入れる"
+	if p.held is Plate:
+		t += "\n左クリック: 皿を下げる" if p.held.meats.is_empty() else "\n肉が残っている皿はゴミ箱へ"
 	return t
 
 
@@ -72,6 +74,15 @@ func primary(p: Player, _pos: Vector3, _nrm: Vector3) -> bool:
 		return true
 	if p.held == null and grate:
 		p.pick(grate)
+		return true
+	if p.held is Plate:
+		if not p.held.meats.is_empty():
+			Game.say("肉が残っている皿はゴミ箱へ")
+			return true
+		var pl: Item = p.held
+		pl.detach()
+		pl.queue_free()
+		Game.main.dirty_dishes += 1
 		return true
 	return false
 

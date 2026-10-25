@@ -183,7 +183,7 @@ func _process(dt: float) -> void:
 		burnt += m.burnt_amount()
 		cooking += h
 	if grate:
-		grate.add_dirt(dt * (drip * 0.5 + burnt * 0.015))
+		grate.add_dirt(dt * (drip * 0.25 + burnt * 0.01))
 	if drip > 0.0 and randf() < drip * heat * dt * 4.0:
 		flare = 1.0
 		_sizzle.pop(1.0)
@@ -202,8 +202,9 @@ func _process(dt: float) -> void:
 
 func get_hint(p: Player) -> String:
 	var t := title
-	if p.held is Meat:
-		t += "\n左クリック: 網にのせる" if grate else "\n網がない（網をセットしてから）"
+	if p.held is Meat or (p.held is Plate and not p.held.meats.is_empty()):
+		var what := "皿から肉を1枚のせる" if p.held is Plate else "網にのせる"
+		t += ("\n左クリック: " + what) if grate else "\n網がない（網をセットしてから）"
 	elif p.held is Grate:
 		t += "\n左クリック: 網をセット" if grate == null else "\nもう網がのっている"
 	elif p.held is Charcoal:
@@ -232,18 +233,15 @@ func primary(p: Player, pos: Vector3, _nrm: Vector3) -> bool:
 		if grate == null:
 			Game.say("網がない")
 			return true
-		var m: Meat = p.held
-		m.detach()
-		m.reparent(self, false)
 		var lp := to_local(pos)
-		var v := Vector2(lp.x, lp.z)
-		if v.length() > R - 0.03:
-			v = v.normalized() * (R - 0.03)
-		m.position = Vector3(v.x, GRATE_Y + 0.003 + m.data.t * 0.5, v.y)
-		m.rotation = Vector3(PI if m.flipped else 0.0, p.rotation.y - global_rotation.y, 0.0)
-		m.container = self
-		m.set_placed()
-		meats.append(m)
+		place_meat(p.held, Vector2(lp.x, lp.z), p.rotation.y - global_rotation.y)
+		return true
+	if p.held is Plate and not p.held.meats.is_empty():
+		if grate == null:
+			Game.say("網がない")
+			return true
+		var lp2 := to_local(pos)
+		place_meat(p.held.meats[0], Vector2(lp2.x, lp2.z), p.rotation.y - global_rotation.y)
 		return true
 	if p.held is Grate:
 		if grate == null:
@@ -265,6 +263,18 @@ func primary(p: Player, pos: Vector3, _nrm: Vector3) -> bool:
 		p.pick(grate)
 		return true
 	return false
+
+
+func place_meat(m: Meat, v: Vector2, yaw: float) -> void:
+	m.detach()
+	m.reparent(self, false)
+	if v.length() > R - 0.03:
+		v = v.normalized() * (R - 0.03)
+	m.position = Vector3(v.x, GRATE_Y + 0.003 + m.data.t * 0.5, v.y)
+	m.rotation = Vector3(PI if m.flipped else 0.0, yaw, 0.0)
+	m.container = self
+	m.set_placed()
+	meats.append(m)
 
 
 func scroll(_p: Player, dir: int) -> void:
