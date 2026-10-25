@@ -108,7 +108,7 @@ func nav_path(from: Vector3, to: Vector3) -> Array[Vector3]:
 
 func _setup_input() -> void:
 	var keys := {
-		"move_f": [KEY_W, KEY_UP], "move_b": [KEY_S, KEY_DOWN], "move_l": [KEY_A, KEY_LEFT], "move_r": [KEY_D, KEY_RIGHT],
+		"move_f": [KEY_W, KEY_UP], "move_b": [KEY_S, KEY_DOWN], "move_l": [KEY_A], "move_r": [KEY_D], "turn_l": [KEY_LEFT], "turn_r": [KEY_RIGHT],
 		"sprint": [KEY_SHIFT], "use": [KEY_E], "pause": [KEY_ESCAPE], "help": [KEY_H], "next_day": [KEY_ENTER, KEY_KP_ENTER],
 	}
 	for a in keys:

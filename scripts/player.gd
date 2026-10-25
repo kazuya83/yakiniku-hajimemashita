@@ -77,6 +77,9 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _physics_process(dt: float) -> void:
+	# ← → は視点を回す
+	if not Game.hud.ticket_open():
+		rotation.y -= Input.get_axis("turn_l", "turn_r") * 2.2 * dt
 	var inp := Input.get_vector("move_l", "move_r", "move_f", "move_b")
 	var dir := (transform.basis * Vector3(inp.x, 0, inp.y)).normalized()
 	var spd := 4.6 if Input.is_action_pressed("sprint") else 2.8
