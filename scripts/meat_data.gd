@@ -1,0 +1,69 @@
+class_name MeatData
+## 部位ごとの数値と、肉の形のメッシュ生成
+
+# w/d/t はメートル。sear_k は表面の焼ける速さ、fat は脂の量、ideal は中の火の通りのちょうどいい範囲
+const CUTS := {
+	"tan": {
+		"name": "タン塩", "price": 900, "w": 0.085, "d": 0.085, "t": 0.005, "exp": 2.0,
+		"sear_k": 1.35, "fat": 0.25, "color": Color(0.80, 0.50, 0.50), "fat_color": Color(0.93, 0.85, 0.82),
+		"marbling": 0.12, "ideal": Vector2(0.55, 0.95),
+	},
+	"karubi": {
+		"name": "カルビ", "price": 980, "w": 0.11, "d": 0.06, "t": 0.008, "exp": 4.0,
+		"sear_k": 1.0, "fat": 0.95, "color": Color(0.72, 0.18, 0.18), "fat_color": Color(0.96, 0.88, 0.84),
+		"marbling": 0.65, "ideal": Vector2(0.6, 1.0),
+	},
+	"rosu": {
+		"name": "ロース", "price": 1080, "w": 0.10, "d": 0.072, "t": 0.009, "exp": 2.4,
+		"sear_k": 0.95, "fat": 0.5, "color": Color(0.70, 0.17, 0.19), "fat_color": Color(0.95, 0.86, 0.82),
+		"marbling": 0.38, "ideal": Vector2(0.5, 0.85),
+	},
+	"harami": {
+		"name": "ハラミ", "price": 1180, "w": 0.13, "d": 0.045, "t": 0.012, "exp": 3.0,
+		"sear_k": 0.9, "fat": 0.5, "color": Color(0.55, 0.11, 0.12), "fat_color": Color(0.90, 0.78, 0.74),
+		"marbling": 0.22, "ideal": Vector2(0.5, 0.9),
+	},
+}
+
+const ORDER := ["tan", "karubi", "rosu", "harami"]
+
+
+static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(seed * 1000.0)
+	var ph1 := rng.randf() * TAU
+	var ph2 := rng.randf() * TAU
+	var n := 32
+	var pts: Array[Vector2] = []
+	var e: float = d.exp
+	for i in n:
+		var a := TAU * i / n
+		var c := cos(a)
+		var s := sin(a)
+		var x: float = signf(c) * pow(absf(c), 2.0 / e) * d.w * 0.5
+		var z: float = signf(s) * pow(absf(s), 2.0 / e) * d.d * 0.5
+		var k := 1.0 + 0.06 * sin(3.0 * a + ph1) + 0.035 * sin(7.0 * a + ph2)
+		pts.append(Vector2(x * k, z * k))
+	var ht: float = d.t * 0.5
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in n:
+		var p0 := pts[i]
+		var p1 := pts[(i + 1) % n]
+		var t0 := Vector3(p0.x, ht, p0.y)
+		var t1 := Vector3(p1.x, ht, p1.y)
+		var b0 := Vector3(p0.x, -ht, p0.y)
+		var b1 := Vector3(p1.x, -ht, p1.y)
+		_tri(st, Vector3(0, ht, 0), t0, t1, Vector3.UP)
+		_tri(st, Vector3(0, -ht, 0), b1, b0, Vector3.DOWN)
+		var nrm := Vector3(p1.y - p0.y, 0.0, -(p1.x - p0.x)).normalized()
+		_tri(st, t0, b0, t1, nrm)
+		_tri(st, t1, b0, b1, nrm)
+	return st.commit()
+
+
+static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, nrm: Vector3) -> void:
+	for v in [a, b, c]:
+		st.set_normal(nrm)
+		st.set_uv(Vector2(v.x, v.z) * 5.0)
+		st.add_vertex(v)

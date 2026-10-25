@@ -1,0 +1,43 @@
+name: Windows版をビルド
+
+on:
+  push:
+    branches: ["claude/project-thread-euroue", "main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: 4.5.1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Godot と書き出しテンプレートを用意
+        run: |
+          cd "$RUNNER_TEMP"
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          wget -q https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          unzip -q Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip
+          unzip -q Godot_v${GODOT_VERSION}-stable_export_templates.tpz
+          mkdir -p ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          mv templates/windows_release_x86_64.exe templates/windows_debug_x86_64.exe templates/version.txt ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable/
+          echo "GODOT=$RUNNER_TEMP/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+      - name: インポート
+        run: timeout 600 "$GODOT" --headless --path . --import || true
+      - name: Windows向けに書き出し
+        run: |
+          mkdir -p build
+          "$GODOT" --headless --path . --export-release "Windows Desktop" build/yakiniku-hajimemashita.exe
+          test -f build/yakiniku-hajimemashita.exe
+          cd build && zip -9 ../yakiniku-hajimemashita-windows.zip yakiniku-hajimemashita.exe
+      - name: Releases に公開
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.${{ github.run_number }}
+          name: 焼肉屋はじめました v0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: yakiniku-hajimemashita-windows.zip
+          make_latest: true
