@@ -72,7 +72,59 @@ static func is_drink(k: String) -> bool:
 	return DRINKS.has(k)
 
 
-static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
+## 写真から作った肉のテクスチャ（assets/meat/<部位>.webp）。なければ null
+static var _tex_cache := {}
+
+
+static func photo(cut: String) -> Dictionary:
+	if _tex_cache.has(cut):
+		return _tex_cache[cut]
+	var info := {}
+	var path := "res://assets/meat/%s.webp" % cut
+	if cut != "" and ResourceLoader.exists(path):
+		var tex: Texture2D = load(path)
+		var img := tex.get_image()
+		if img.is_compressed():
+			img.decompress()
+		# 写真の輪郭（透明でないところ）を中心からの距離で32方向ぶん測る
+		var iw := img.get_width()
+		var ih := img.get_height()
+		var outline: Array[Vector2] = []
+		for i in 32:
+			var a := TAU * i / 32
+			var dir := Vector2(cos(a), sin(a))
+			var r := 0.5
+			var t := 0.0
+			while t < 0.75:
+				var px := int((0.5 + dir.x * t) * iw)
+				var py := int((0.5 + dir.y * t) * ih)
+				if px < 0 or py < 0 or px >= iw or py >= ih or img.get_pixel(px, py).a < 0.5:
+					break
+				r = t
+				t += 0.004
+			outline.append(dir * r)
+		info = {"tex": tex, "aspect": float(ih) / iw, "outline": outline}
+	_tex_cache[cut] = info
+	return info
+
+
+## 肉の見た目（写真があれば写真、なければ模様を計算で描く）
+static func make_material(cut: String, seed: float) -> ShaderMaterial:
+	var d: Dictionary = CUTS[cut]
+	var mat := ShaderMaterial.new()
+	mat.shader = preload("res://shaders/meat.gdshader")
+	mat.set_shader_parameter("raw_color", d.color)
+	mat.set_shader_parameter("fat_color", d.fat_color)
+	mat.set_shader_parameter("marbling", d.marbling)
+	mat.set_shader_parameter("seed", seed)
+	var ph := photo(cut)
+	if not ph.is_empty():
+		mat.set_shader_parameter("use_tex", true)
+		mat.set_shader_parameter("albedo_tex", ph.tex)
+	return mat
+
+
+static func build_mesh(d: Dictionary, seed: float, cut: String = "") -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(seed * 1000.0)
 	var ph1 := rng.randf() * TAU
@@ -80,7 +132,20 @@ static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
 	var n := 32
 	var pts: Array[Vector2] = []
 	var e: float = d.exp
+	var ph := photo(cut)
+	# 写真があるときは、写真の縦横比と輪郭に合わせる（面積は元の大きさのまま）
+	var pw: float = d.w
+	var pd: float = d.d
+	if not ph.is_empty():
+		pw = sqrt(d.w * d.d / ph.aspect)
+		pd = pw * ph.aspect
+	_uv_size = Vector2(pw, pd)
+	_use_photo = not ph.is_empty()
 	for i in n:
+		if _use_photo:
+			var o: Vector2 = ph.outline[i]
+			pts.append(Vector2(o.x * pw, o.y * pd) * 0.98)
+			continue
 		var a := TAU * i / n
 		var c := cos(a)
 		var s := sin(a)
@@ -135,8 +200,15 @@ static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
 
 
 ## 頂点。UV2.x に中心からの距離（0〜1）を入れて、焼くと縁が反るのに使う
+static var _uv_size := Vector2.ONE
+static var _use_photo := false
+
+
 static func _v(st: SurfaceTool, v: Vector3, f: float) -> void:
-	st.set_uv(Vector2(v.x, v.z) * 5.0)
+	if _use_photo:
+		st.set_uv(Vector2(v.x / _uv_size.x + 0.5, v.z / _uv_size.y + 0.5))
+	else:
+		st.set_uv(Vector2(v.x, v.z) * 5.0)
 	st.set_uv2(Vector2(f, 0.0))
 	st.add_vertex(v)
 

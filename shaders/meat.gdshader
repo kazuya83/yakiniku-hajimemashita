@@ -39,7 +39,7 @@ float fbm(vec2 p) {
 
 void vertex() {
 	float k = clamp(core, 0.0, 1.3);
-	rr = use_tex ? clamp(length(VERTEX.xz) / radius, 0.0, 1.0) : UV2.x;
+	rr = UV2.x;
 	// 火が通ると縮んで少しふくらみ、縁が反る
 	VERTEX.xz *= 1.0 - 0.11 * k;
 	VERTEX.y *= 1.0 + 0.18 * k;
@@ -49,9 +49,9 @@ void vertex() {
 }
 
 vec3 cooked(vec3 base, float s, float n) {
-	vec3 grey = vec3(0.55, 0.40, 0.33);
-	vec3 brown = vec3(0.40, 0.19, 0.07);
-	vec3 crust = vec3(0.22, 0.10, 0.04);
+	vec3 grey = vec3(0.26, 0.15, 0.11);
+	vec3 brown = vec3(0.25, 0.11, 0.045);
+	vec3 crust = vec3(0.12, 0.05, 0.02);
 	vec3 charc = vec3(0.04, 0.03, 0.025);
 	vec3 c = mix(base, grey * (0.85 + 0.3 * n), smoothstep(0.06, 0.5, s));
 	c = mix(c, brown * (0.7 + 0.6 * n), smoothstep(0.42, 0.9, s));
@@ -80,7 +80,12 @@ void fragment() {
 		fatmask = smoothstep(0.5, 0.72, lum) * (1.0 - smoothstep(0.25, 0.45, tc.r - tc.g));
 		red = tc;
 	}
-	vec3 base = mix(red, fat_color * (0.92 + 0.1 * m), fatmask);
+	// 写真の明るさのムラ（焼けても残す細かい模様）
+	float detail = 1.0;
+	if (use_tex) {
+		detail = clamp(dot(texture(albedo_tex, UV).rgb, vec3(0.3, 0.5, 0.2)) * 3.0 + 0.55, 0.6, 1.5);
+	}
+	vec3 base = use_tex ? red : mix(red, fat_color * (0.92 + 0.1 * m), fatmask);
 
 	float s;
 	float mk;
@@ -94,10 +99,10 @@ void fragment() {
 	// 脂身は焼けると透き通って黄金色に
 	vec3 fat_cooked = mix(fat_color, vec3(0.85, 0.62, 0.32), smoothstep(0.2, 0.9, sl));
 	if (use_tex) { fat_cooked = mix(red, vec3(0.85, 0.62, 0.32), smoothstep(0.2, 0.9, sl)); }
-	vec3 col = mix(cooked(red, sl, m), fat_cooked * (1.0 - smoothstep(1.0, 1.4, sl) * 0.9), fatmask * (1.0 - smoothstep(0.7, 1.2, sl) * 0.6));
+	vec3 col = mix(cooked(red, sl, m) * mix(1.0, detail, smoothstep(0.05, 0.5, sl)), fat_cooked * (1.0 - smoothstep(1.0, 1.4, sl) * 0.9), fatmask * (1.0 - smoothstep(0.7, 1.2, sl) * 0.6));
 	// 網の焼き目
 	float stripe = smoothstep(0.8, 0.97, abs(sin(lp.x * 262.0 + sin(lp.z * 90.0) * 0.4)));
-	col = mix(col, col * 0.18, stripe * clamp(mk, 0.0, 1.0) * 0.92);
+	col = mix(col, col * 0.25, stripe * clamp(mk, 0.0, 1.0) * 0.8);
 	ALBEDO = col;
 
 	// 表面の凹凸：生は繊維、焼くとカリッとした焼き面

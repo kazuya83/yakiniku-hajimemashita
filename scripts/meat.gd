@@ -2,8 +2,6 @@ class_name Meat
 extends Item
 ## 肉1枚。上の面・下の面・中の火の通り・脂を持ち、網の熱で焼ける
 
-const SHADER := preload("res://shaders/meat.gdshader")
-
 var cut := "karubi"
 var data: Dictionary
 var sear := [0.0, 0.0]  # [自分の上面(+Y), 自分の下面(-Y)]
@@ -23,13 +21,9 @@ func setup(c: String) -> Meat:
 	fat = data.fat
 	var sd := randf() * 100.0
 	var mi := MeshInstance3D.new()
-	mi.mesh = MeatData.build_mesh(data, sd)
-	mat = ShaderMaterial.new()
-	mat.shader = SHADER
-	mat.set_shader_parameter("raw_color", data.color)
-	mat.set_shader_parameter("fat_color", data.fat_color)
-	mat.set_shader_parameter("marbling", data.marbling)
-	mat.set_shader_parameter("seed", sd)
+	mi.mesh = MeatData.build_mesh(data, sd, c)
+	mat = MeatData.make_material(c, sd)
+	mat.set_shader_parameter("radius", maxf(data.w, data.d) * 0.5)
 	mi.material_override = mat
 	add_child(mi)
 	var cs := CollisionShape3D.new()

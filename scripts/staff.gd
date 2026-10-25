@@ -24,13 +24,15 @@ var _leaving := false
 
 func _ready() -> void:
 	person = Person.new()
+	person.look = "staff_f" if role == "hall" else "staff_m"
 	add_child(person)
 	person.position = Game.main.door_pos
 	person.speed = 1.7
-	(person.model.get_child(0) as MeshInstance3D).material_override = Build.mat(SHIRTS[role], 0.7)
-	if role == "cook":
-		Build.cyl(person.head, 0.128, 0.128, 0.035, Vector3(0, 0.05, 0), Build.mat(Color(0.95, 0.95, 0.95), 0.8), false, 24)
-	Build.box(person.model, Vector3(0.36, 0.6, 0.02), Vector3(0, 1.0, 0.205), Build.mat(Color(0.12, 0.1, 0.08), 0.8), false)
+	if not person.real:
+		(person.model.get_child(0) as MeshInstance3D).material_override = Build.mat(SHIRTS[role], 0.7)
+		if role == "cook":
+			Build.cyl(person.head, 0.128, 0.128, 0.035, Vector3(0, 0.05, 0), Build.mat(Color(0.95, 0.95, 0.95), 0.8), false, 24)
+		Build.box(person.model, Vector3(0.36, 0.6, 0.02), Vector3(0, 1.0, 0.205), Build.mat(Color(0.12, 0.1, 0.08), 0.8), false)
 	var name_l := Build.label(person, "バイト（%s）" % Game.ROLES[role].name, Vector3(0, 1.95, 0), 30, Color(0.8, 0.95, 1.0))
 	name_l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_bubble = Build.label(person, "", Vector3(0, 2.15, 0), 40)

@@ -117,7 +117,7 @@ func _walk(dt: float) -> void:
 	if _person.walk(dt):
 		if state == "walk_in":
 			state = "waiting"
-			_person.sit(0.0)
+			_person.sit(0.0, -0.2, 0.69)
 			_say(("いつもの、%sを%d枚%s！" if ctype == "regular" else "%sを%d枚%s！") % [MeatData.CUTS[cut].name, count, ("と" + MeatData.DRINKS[drink].name + "ください") if drink != "" else "ください"])
 		else:
 			Game.main.customer_left(self)

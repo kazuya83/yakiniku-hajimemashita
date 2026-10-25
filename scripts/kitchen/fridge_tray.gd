@@ -16,14 +16,8 @@ func _ready() -> void:
 	var d: Dictionary = MeatData.CUTS[cut]
 	for i in 8:
 		var mi := MeshInstance3D.new()
-		mi.mesh = MeatData.build_mesh(d, randf() * 100.0)
-		var mat := ShaderMaterial.new()
-		mat.shader = SHADER
-		mat.set_shader_parameter("raw_color", d.color)
-		mat.set_shader_parameter("fat_color", d.fat_color)
-		mat.set_shader_parameter("marbling", d.marbling)
-		mat.set_shader_parameter("seed", randf() * 100.0)
-		mi.material_override = mat
+		mi.mesh = MeatData.build_mesh(d, randf() * 100.0, cut)
+		mi.material_override = MeatData.make_material(cut, randf() * 100.0)
 		mi.position = Vector3(-0.09 + (i % 2) * 0.18, 0.03 + (i / 4) * 0.012, -0.13 + ((i / 2) % 2) * 0.12 + (i / 4) * 0.13)
 		mi.rotation.y = randf_range(-0.3, 0.3)
 		add_child(mi)
