@@ -23,9 +23,30 @@ const CUTS := {
 		"sear_k": 0.9, "fat": 0.5, "color": Color(0.55, 0.11, 0.12), "fat_color": Color(0.90, 0.78, 0.74),
 		"marbling": 0.22, "ideal": Vector2(0.5, 0.9),
 	},
+	"jo_tan": {
+		"name": "上タン塩", "price": 1580, "w": 0.09, "d": 0.09, "t": 0.009, "exp": 2.2,
+		"sear_k": 1.15, "fat": 0.35, "color": Color(0.84, 0.55, 0.56), "fat_color": Color(0.95, 0.88, 0.86),
+		"marbling": 0.3, "ideal": Vector2(0.5, 0.85),
+	},
+	"tokujo_karubi": {
+		"name": "特上カルビ", "price": 1880, "w": 0.12, "d": 0.07, "t": 0.009, "exp": 4.2,
+		"sear_k": 1.05, "fat": 1.0, "color": Color(0.78, 0.24, 0.25), "fat_color": Color(0.97, 0.92, 0.88),
+		"marbling": 0.9, "ideal": Vector2(0.45, 0.8),
+	},
 }
 
-const ORDER := ["tan", "karubi", "rosu", "harami"]
+const ORDER := ["tan", "karubi", "rosu", "harami", "jo_tan", "tokujo_karubi"]
+const BASE := ["tan", "karubi", "rosu", "harami"]
+const PREMIUM := ["jo_tan", "tokujo_karubi"]
+
+
+## その部位がメニューにあるか（高級部位は成長で解放）
+static func on_menu(c: String) -> bool:
+	return not PREMIUM.has(c) or Game.has("premium")
+
+
+static func menu() -> Array:
+	return ORDER.filter(func(c): return on_menu(c))
 
 const DRINKS := {
 	"beer": {"name": "生ビール", "price": 550, "color": Color(0.95, 0.62, 0.12, 0.85)},

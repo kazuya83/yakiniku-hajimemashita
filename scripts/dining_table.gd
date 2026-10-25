@@ -54,6 +54,8 @@ func build(wood_m: Material, dark_wood: Material, steel: Material) -> void:
 	set_meta("pl_size", Vector2(1.5, 2.3))
 	set_meta("pl_price", 25000)
 	refresh_chairs()
+	if Game.has("touch"):
+		add_touch_panel()
 
 
 ## 椅子の位置（店内の座標）。テーブルを動かしたら呼ぶ
@@ -104,6 +106,39 @@ func hold_use(p: Player, dt: float) -> void:
 		_stain.visible = false
 		(_stain.material_override as StandardMaterial3D).albedo_color.a = 0.55
 		Game.say("テーブルがきれいになった")
+
+
+## アルバイトが片づける：皿とジョッキを洗い物にして下げる
+func clear_all() -> void:
+	for it in items.duplicate():
+		if it is Plate:
+			for m in it.meats:
+				m.queue_free()
+			it.meats.clear()
+			Game.dirty_plates += 1
+		elif it is Drink:
+			Game.dirty_jugs += 1
+		it.detach()
+		it.queue_free()
+	items.clear()
+
+
+func finish_wipe() -> void:
+	dirty = false
+	_stain.visible = false
+
+
+## タッチパネル（成長で解放）を卓に置く
+func add_touch_panel() -> void:
+	if has_node("Touch"):
+		return
+	var n := Node3D.new()
+	n.name = "Touch"
+	n.position = Vector3(0.55, TOP_Y, -0.33)
+	n.rotation = Vector3(-0.5, PI + 0.3, 0)
+	add_child(n)
+	Build.box(n, Vector3(0.2, 0.14, 0.012), Vector3(0, 0.07, 0), Build.mat(Color(0.05, 0.05, 0.06), 0.3), false)
+	Build.box(n, Vector3(0.18, 0.12, 0.002), Vector3(0, 0.07, -0.007), Build.glow_mat(Color(0.3, 0.6, 1.0), 0.8), false)
 
 
 func put_plate(pl: Item) -> bool:

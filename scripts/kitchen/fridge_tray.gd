@@ -41,6 +41,10 @@ func _ready() -> void:
 
 
 func _process(_dt: float) -> void:
+	visible = MeatData.on_menu(cut)
+	if not visible:
+		_body.collision_layer = 0
+		return
 	var n := Game.stock_count(cut)
 	var show := ceili(n / 4.0)
 	for i in _slices.size():

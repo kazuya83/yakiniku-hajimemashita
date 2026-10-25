@@ -20,6 +20,8 @@ func refresh() -> void:
 func get_hint(_p: Player) -> String:
 	match Game.main.phase:
 		"prep":
+			if not Game.main.clocked_in:
+				return "札（準備中）\nまずタイムカードを押して出社しよう"
 			return "札（準備中）\nE: 札をひっくり返して開店する"
 		"open":
 			return "札（営業中）"
@@ -28,4 +30,7 @@ func get_hint(_p: Player) -> String:
 
 func use(_p: Player) -> void:
 	if Game.main.phase == "prep":
+		if not Game.main.clocked_in:
+			Game.say("まずタイムカードを押して出社しよう")
+			return
 		Game.main.open_shop()

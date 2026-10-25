@@ -20,13 +20,20 @@ var _person: Person
 var _door := Vector3.ZERO
 var _mood := ""
 var _mood_t := 0.0
+var ctype := "normal"
+var by_staff := false   # アルバイトが焼いて出した
 
 
 func setup(s: Seat, c: String, n: int, door: Vector3) -> Customer:
 	seat = s
 	_door = door
+	ctype = Game.pick_type(false)
 	cut = c
+	if ctype == "gourmet" and Game.has("premium") and randf() < 0.7:
+		cut = MeatData.PREMIUM.pick_random()
 	count = n
+	max_patience = 160.0 * Game.type_patience(ctype)
+	patience = max_patience
 	if randf() < 0.55:
 		drink = ["beer", "beer", "highball", "oolong"].pick_random()
 	path = Game.main.nav_path(door, s.stool_pos + Vector3(0, 0, 0.35))
@@ -111,7 +118,7 @@ func _walk(dt: float) -> void:
 		if state == "walk_in":
 			state = "waiting"
 			_person.sit(0.0)
-			_say("%sを%d枚%s！" % [MeatData.CUTS[cut].name, count, ("と" + MeatData.DRINKS[drink].name + "ください") if drink != "" else "ください"])
+			_say(("いつもの、%sを%d枚%s！" if ctype == "regular" else "%sを%d枚%s！") % [MeatData.CUTS[cut].name, count, ("と" + MeatData.DRINKS[drink].name + "ください") if drink != "" else "ください"])
 		else:
 			Game.main.customer_left(self)
 			queue_free()
@@ -140,6 +147,10 @@ func _seated(dt: float) -> void:
 
 
 func _reaction(m: Meat, s: float) -> String:
+	if ctype == "complainer" and s < 0.85 and not m.dropped:
+		return ["焼き方がなってない！", "これでお金取るの？", "店長呼んで！"].pick_random()
+	if ctype == "gourmet" and s >= 0.9:
+		return "見事な火入れだ…！"
 	if m.dropped:
 		return "床に落ちたやつじゃない…？"
 	match m.state_word():
@@ -160,11 +171,13 @@ func _finish(angry: bool) -> void:
 		avg += s
 	avg = avg / maxf(scores.size(), 1.0)
 	var stars := 1.0 if angry and scores.is_empty() else clampf(roundf(1.0 + avg * 4.0) - (1.0 if angry else 0.0), 1.0, 5.0)
+	if not angry:
+		stars = Game.type_stars(ctype, stars, avg)
 	var price: int = MeatData.CUTS[cut].price
 	var base := price / 4.0 * 1.5 * eaten
 	if drink_served:
 		base += MeatData.DRINKS[drink].price
-	var pay := int(round(base * (0.7 + 0.3 * avg) / 10.0)) * 10
+	var pay := int(round(base * (0.7 + 0.3 * avg) * Game.type_pay(ctype, avg) / 10.0)) * 10
 	if pay > 0:
 		Game.add_money(pay)
 	Game.main.record_visit(pay, stars)
@@ -183,6 +196,7 @@ func _update_bubble() -> void:
 	if _mood_t > 0.0:
 		t = _mood
 	elif is_seated():
-		t = "%s  %d/%d\n%s" % [order_text(), eaten, count, Game.bar(patience / max_patience, 8)]
+		var tag: String = Game.TYPE_NAMES[ctype]
+		t = "%s%s  %d/%d\n%s" % [("【%s】" % tag) if tag != "" else "", order_text(), eaten, count, Game.bar(patience / max_patience, 8)]
 	_bubble.text = t
 	_bubble.modulate = Color(1, 0.55, 0.45) if is_seated() and patience < max_patience * 0.3 else Color.WHITE

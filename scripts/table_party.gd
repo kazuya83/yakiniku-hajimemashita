@@ -14,6 +14,7 @@ var scores: Array[float] = []
 var eaten := 0
 var service := 1.0
 var rounds := 0
+var ctype := "normal"
 var _bubble: Label3D
 var _say_t := 0.0
 var _said := ""
@@ -26,6 +27,9 @@ var _plates_given: Array[Plate] = []
 
 func setup(t: DiningTable, n: int, door: Vector3) -> TableParty:
 	table = t
+	ctype = Game.pick_type(true)
+	if ctype == "group":
+		n = 4
 	for i in n:
 		var p := Person.new()
 		add_child(p)
@@ -48,6 +52,11 @@ func say(t: String) -> void:
 
 
 func status_text() -> String:
+	var tag: String = Game.TYPE_NAMES[ctype]
+	return (("【%s】" % tag) if tag != "" else "") + _status_text()
+
+
+func _status_text() -> String:
 	match state:
 		"walk_in":
 			return "ご案内中"
@@ -82,6 +91,11 @@ func ticket_text() -> String:
 	return "・".join(parts) if not parts.is_empty() else "（未記入）"
 
 
+## 頼んだのにまだ届いていない数
+func order_waiting() -> int:
+	return _sum(order) - _sum(delivered)
+
+
 func _sum(d: Dictionary) -> int:
 	var s := 0
 	for k in d:
@@ -107,7 +121,10 @@ func _process(dt: float) -> void:
 				_t = 0.0
 		"seated":
 			if _t > randf_range(5.0, 9.0):
-				_call("call_order", "すみませーん！注文お願いします")
+				if Game.has("touch"):
+					_touch_order()
+				else:
+					_call("call_order", "すみませーん！注文お願いします")
 		"call_order", "call_bill":
 			patience -= dt
 			if patience <= 0.0:
@@ -126,9 +143,40 @@ func _process(dt: float) -> void:
 	_update_bubble()
 
 
+## ホール担当のアルバイトが注文を聞く（伝票も書いてくれる）
+func staff_take_order() -> void:
+	_touch_order()
+	say("%sお願いします！" % order_text())
+
+
+## まだ届いていない物の中で、次に運ぶべき物（exclude は他の人が運んでいる数）
+func next_wanted(exclude: Dictionary) -> String:
+	for c in MeatData.DRINK_ORDER + MeatData.ORDER:
+		if order.get(c, 0) - delivered.get(c, 0) - exclude.get(c, 0) > 0:
+			return c
+	return ""
+
+
+func wants_key(k: String) -> bool:
+	return order.get(k, 0) > delivered.get(k, 0)
+
+
+## タッチパネルで注文（伝票は自動で入る）
+func _touch_order() -> void:
+	_make_order()
+	ticket = order.duplicate()
+	for c in delivered:
+		ticket[c] = maxi(ticket.get(c, 0), delivered[c])
+	state = "wait_food"
+	patience = 200.0 * Game.type_patience(ctype)
+	if Game.has("touch"):
+		say("タッチパネルで注文しました")
+		Game.say("テーブル%dからタッチパネルで注文: %s" % [table.index, order_text()])
+
+
 func _call(st: String, text: String) -> void:
 	state = st
-	patience = 70.0
+	patience = 70.0 * Game.type_patience(ctype)
 	members[0].raise_hand(true)
 	say(text)
 
@@ -149,11 +197,16 @@ func on_use(_p: Player) -> void:
 
 func _make_order() -> void:
 	var n := maxi(1, members.size() - 1 + randi_range(0, 1)) if rounds == 0 else randi_range(1, 2)
+	if ctype == "group":
+		n += 2
+	var menu := MeatData.menu()
 	for i in n:
-		var c: String = MeatData.ORDER.pick_random()
+		var c: String = menu.pick_random()
+		if ctype == "gourmet" and Game.has("premium") and randf() < 0.6:
+			c = MeatData.PREMIUM.pick_random()
 		order[c] = order.get(c, 0) + 1
 	for i in members.size():
-		if randf() < (0.7 if rounds == 0 else 0.3):
+		if randf() < (0.9 if ctype == "group" else 0.7) if rounds == 0 else (0.5 if ctype == "group" else 0.3):
 			var d: String = ["beer", "beer", "beer", "highball", "oolong"].pick_random()
 			order[d] = order.get(d, 0) + 1
 	rounds += 1
@@ -286,8 +339,11 @@ func _eat_loop(dt: float) -> void:
 				return
 	# 全部食べたら追加注文かお会計
 	if raw_left == 0 and my_on_grill.is_empty() and _sum(delivered) >= _sum(order):
-		if rounds < 2 and randf() < 0.45:
-			_call("call_order", "追加の注文いいですか？")
+		if rounds < (3 if ctype == "group" else 2) and randf() < (0.65 if ctype == "group" else 0.45):
+			if Game.has("touch"):
+				_touch_order()
+			else:
+				_call("call_order", "追加の注文いいですか？")
 		else:
 			_call("call_bill", "お会計お願いします")
 
@@ -305,9 +361,10 @@ func _pay() -> void:
 	var total := 0
 	for c in delivered:
 		total += MeatData.item_price(c) * delivered[c]
-	total = int(round(total * (0.85 + 0.15 * _food_score()) / 10.0)) * 10
+	total = int(round(total * (0.85 + 0.15 * _food_score()) * Game.type_pay(ctype, _food_score()) / 10.0)) * 10
 	Game.add_money(total)
 	var stars := clampf(roundf(1.0 + 4.0 * (0.5 * clampf(service, 0.0, 1.0) + 0.5 * _food_score())), 1.0, 5.0)
+	stars = Game.type_stars(ctype, stars, _food_score())
 	Game.main.record_visit(total, stars)
 	Game.say("テーブル%d お会計 %s　評価 %s" % [table.index, Game.yen(total), _stars(stars)])
 	say("ごちそうさまでした！ " + _stars(stars))

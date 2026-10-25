@@ -25,6 +25,11 @@ var _buy_counts := {}
 var _buy_labels := {}
 var _buy_stock := {}
 var _buy_total: Label
+var _staff: PanelContainer
+var _staff_labels := {}
+var _staff_total: Label
+var _rows := {}        # 伝票・発注の行（メニューにない部位は隠す）
+var _block_ui := []    # 塊肉の発注ボタン（自家カットを買うまで隠す）
 
 
 func _ready() -> void:
@@ -52,6 +57,7 @@ func _ready() -> void:
 	_orders.offset_right = -24
 	_orders.offset_top = 18
 	_orders.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_orders.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
 
 	_hint = _make_label(root, 22)
 	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -84,6 +90,7 @@ func _ready() -> void:
 	_build_summary(root)
 	_build_ticket(root)
 	_build_purchase(root)
+	_build_staff(root)
 	_build_start(root)
 	Game.toast.connect(show_toast)
 
@@ -170,13 +177,81 @@ func _build_start(root: Control) -> void:
 	v.add_child(t)
 	var d := Label.new()
 	d.add_theme_font_size_override("font_size", 21)
-	d.text = "WASD（または矢印キー）: 歩く　Shift: 走る　マウス: 見まわす\n左クリック: つかむ・置く　右クリック: 肉をひっくり返す\nホイール: 七輪の火力・冷蔵庫の部位　E: 使う（長押しで網を洗う）\nEsc: メニュー・画質\n\n1. 奥の冷蔵庫で肉を出す\n2. カウンターの七輪で焼く\n3. 入口の札をEで開店\n4. お客さんの取り皿に、注文の肉を焼いて出す"
+	d.text = "WASD（または矢印キー）: 歩く　Shift: 走る　マウス: 見まわす\n左クリック: つかむ・置く　右クリック: 肉をひっくり返す\nホイール: 七輪の火力・冷蔵庫の部位　E: 使う（長押しで網を洗う）\nEsc: メニュー・画質　B: お店づくり\n\nあなたは焼肉屋の店長。資金 ¥300,000 でスタート。\n1. 家から向かいのお店へ歩き、入口のタイムカードをEで押して出社\n2. 入口横のシフト表（E）でアルバイトを雇える\n　 焼き担当・ホール担当・片づけ担当にまかせるほど楽になる\n3. 札をEでひっくり返して開店。自分でも焼いて運んで、お店を育てよう"
 	v.add_child(d)
 	var b := _button("はじめる（クリック）", func(): _begin())
 	v.add_child(b)
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	b.grab_focus.call_deferred()
+
+
+func _build_staff(root: Control) -> void:
+	_staff = PanelContainer.new()
+	_staff.set_anchors_preset(Control.PRESET_CENTER)
+	Hud.place(_staff, Vector2(-380, -230))
+	_staff.custom_minimum_size = Vector2(760, 0)
+	_staff.add_theme_stylebox_override("panel", _box(Color(0.1, 0.12, 0.16, 0.96)))
+	root.add_child(_staff)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	_staff.add_child(v)
+	var t := Label.new()
+	t.text = "シフト表：アルバイトを雇う（日給は毎日の閉店後にはらう）"
+	t.add_theme_font_size_override("font_size", 22)
+	v.add_child(t)
+	for role in Game.ROLES:
+		var r: Dictionary = Game.ROLES[role]
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		v.add_child(h)
+		var n := Label.new()
+		n.text = "%s　日給 %s\n%s" % [r.name, Game.yen(r.wage), r.desc]
+		n.custom_minimum_size = Vector2(470, 0)
+		n.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+		n.add_theme_font_size_override("font_size", 18)
+		h.add_child(n)
+		h.add_child(_button("－", func(): staff_change(role, -1)))
+		var cnt := Label.new()
+		cnt.custom_minimum_size = Vector2(60, 0)
+		cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cnt.add_theme_font_size_override("font_size", 22)
+		h.add_child(cnt)
+		_staff_labels[role] = cnt
+		h.add_child(_button("＋", func(): staff_change(role, 1)))
+	_staff_total = Label.new()
+	_staff_total.add_theme_font_size_override("font_size", 20)
+	v.add_child(_staff_total)
+	v.add_child(_button("閉じる", func(): close_staff()))
+	_staff.visible = false
+
+
+func open_staff() -> void:
+	_staff_refresh()
+	_staff.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func close_staff() -> void:
+	_staff.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func staff_change(role: String, d: int) -> void:
+	if d > 0:
+		if Game.main.staff.size() >= 8:
+			show_toast("これ以上は雇えない（最大8人）")
+			return
+		Game.main.hire(role)
+	else:
+		Game.main.fire(role)
+	_staff_refresh()
+
+
+func _staff_refresh() -> void:
+	for role in _staff_labels:
+		_staff_labels[role].text = "%d人" % Game.main.staff_count(role)
+	_staff_total.text = "日給の合計 %s　（所持金 %s）" % [Game.yen(Game.main.wages()), Game.yen(Game.money)]
 
 
 func _build_ticket(root: Control) -> void:
@@ -203,6 +278,7 @@ func _build_ticket(root: Control) -> void:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		v.add_child(h)
+		_rows["t_" + c] = h
 		var n := Label.new()
 		n.text = MeatData.item_name(c)
 		n.custom_minimum_size = Vector2(120, 0)
@@ -240,6 +316,7 @@ func _build_purchase(root: Control) -> void:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		v.add_child(h)
+		_rows["b_" + c] = h
 		var n := Label.new()
 		n.text = "%s　1箱 %s" % [MeatData.CUTS[c].name, Game.yen(Game.box_cost(c))]
 		n.custom_minimum_size = Vector2(230, 0)
@@ -258,6 +335,22 @@ func _build_purchase(root: Control) -> void:
 		h.add_child(cnt)
 		_buy_labels[c] = cnt
 		h.add_child(_button("＋", func(): _buy_add(c, 1)))
+		# 塊肉（自家カット）
+		var bn := Label.new()
+		bn.text = "　塊 %s" % Game.yen(Game.block_cost(c))
+		bn.add_theme_font_size_override("font_size", 18)
+		h.add_child(bn)
+		var bm := _button("－", func(): _buy_add("b_" + c, -1))
+		h.add_child(bm)
+		var bc := Label.new()
+		bc.custom_minimum_size = Vector2(40, 0)
+		bc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		bc.add_theme_font_size_override("font_size", 22)
+		h.add_child(bc)
+		_buy_labels["b_" + c] = bc
+		var bp := _button("＋", func(): _buy_add("b_" + c, 1))
+		h.add_child(bp)
+		_block_ui.append_array([bn, bm, bc, bp])
 	_buy_total = Label.new()
 	_buy_total.add_theme_font_size_override("font_size", 22)
 	v.add_child(_buy_total)
@@ -275,10 +368,15 @@ func _build_purchase(root: Control) -> void:
 
 func open_purchase() -> void:
 	for c in MeatData.ORDER:
+		_rows["b_" + c].visible = MeatData.on_menu(c)
 		_buy_counts[c] = 0
 		_buy_labels[c].text = "0箱"
+		_buy_counts["b_" + c] = 0
+		_buy_labels["b_" + c].text = "0"
 		var left := Game.stock_days_left(c)
 		_buy_stock[c].text = "在庫 %d枚%s" % [Game.stock_count(c), ("・あと%d日" % left) if left >= 0 else ""]
+	for u in _block_ui:
+		u.visible = Game.has("selfcut")
 	_buy_refresh()
 	_buy.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -286,21 +384,21 @@ func open_purchase() -> void:
 
 func _buy_add(c: String, d: int) -> void:
 	_buy_counts[c] = clampi(_buy_counts[c] + d, 0, 9)
-	_buy_labels[c].text = "%d箱" % _buy_counts[c]
+	_buy_labels[c].text = str(_buy_counts[c]) if c.begins_with("b_") else "%d箱" % _buy_counts[c]
 	_buy_refresh()
 
 
 func _buy_cost() -> int:
 	var total := 0
 	for c in _buy_counts:
-		total += Game.box_cost(c) * _buy_counts[c]
+		total += (Game.block_cost(c.substr(2)) if c.begins_with("b_") else Game.box_cost(c)) * _buy_counts[c]
 	return total
 
 
 func _buy_refresh() -> void:
 	var pending := []
 	for c in Game.orders:
-		pending.append("%s%d箱" % [MeatData.CUTS[c].name, Game.orders[c]])
+		pending.append(("%s塊%d" % [MeatData.CUTS[c.substr(2)].name, Game.orders[c]]) if c.begins_with("b_") else ("%s%d箱" % [MeatData.CUTS[c].name, Game.orders[c]]))
 	_buy_total.text = "合計 %s　（所持金 %s）%s" % [Game.yen(_buy_cost()), Game.yen(Game.money), ("\n明日届く予定: " + "・".join(pending)) if not pending.is_empty() else ""]
 
 
@@ -329,6 +427,7 @@ func open_ticket(party: TableParty) -> void:
 	_ticket_party = party
 	_ticket_counts = {}
 	for c in MeatData.ORDER + MeatData.DRINK_ORDER:
+		_rows["t_" + c].visible = MeatData.is_drink(c) or MeatData.on_menu(c)
 		_ticket_counts[c] = 0
 		_ticket_labels[c].text = "0"
 	_ticket_title.text = "伝票　テーブル%d" % party.table.index
@@ -366,7 +465,7 @@ static func place(c: Control, off: Vector2) -> void:
 
 
 func ticket_open() -> bool:
-	return _ticket.visible or _buy.visible or (Game.main.build != null and Game.main.build.shop_open())
+	return _ticket.visible or _buy.visible or _staff.visible or (Game.main.build != null and Game.main.build.shop_open())
 
 
 func _begin() -> void:

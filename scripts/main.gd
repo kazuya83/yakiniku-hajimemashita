@@ -20,6 +20,13 @@ var mats := {}
 var room_max_x := ShopBuilder.W / 2
 var nav: NavigationRegion3D
 var build: BuildMode
+var menu_label: Label3D
+var staff: Array[Staff] = []
+var clocked_in := false
+var _clock_in_at := ""
+var prep_min := 0.0       # 出社前・仕込み中の時計（分）
+const DAY_START := 16 * 60 + 35
+const MIN_PER_SEC := 1.0 / 1.5
 
 var phase := "prep"
 var day_time := 0.0
@@ -40,11 +47,11 @@ func _ready() -> void:
 	items_root.name = "Items"
 	add_child(items_root)
 	ShopBuilder.build(self)
+	OutsideBuilder.build(self)
 	_setup_nav()
 	player = Player.new()
 	add_child(player)
-	player.position = Vector3(-0.6, 0.05, -2.9)
-	player.rotation.y = PI
+	_go_home()
 	hud = Hud.new()
 	add_child(hud)
 	Game.hud = hud
@@ -52,7 +59,7 @@ func _ready() -> void:
 	add_child(build)
 	apply_quality(Game.quality)
 	_start_money = Game.money
-	Game.say("仕込みをしたら、入口の札をEでひっくり返して開店！")
+	Game.say("あなたは焼肉屋の店長。家を出たら、向かいの店のタイムカードを押して出社しよう")
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			add_child(load("res://scripts/dev_shot.gd").new())
@@ -119,8 +126,17 @@ func _setup_input() -> void:
 
 func _build_environment() -> void:
 	env = Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.015, 0.015, 0.02)
+	# 夕方の空
+	var sky_m := ProceduralSkyMaterial.new()
+	sky_m.sky_top_color = Color(0.12, 0.16, 0.32)
+	sky_m.sky_horizon_color = Color(0.95, 0.5, 0.25)
+	sky_m.ground_horizon_color = Color(0.3, 0.2, 0.15)
+	sky_m.ground_bottom_color = Color(0.05, 0.04, 0.04)
+	sky_m.sun_angle_max = 20.0
+	var sky := Sky.new()
+	sky.sky_material = sky_m
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.85, 0.7, 0.55)
 	env.ambient_light_energy = 0.22
@@ -141,6 +157,14 @@ func _build_environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
+	var sun := DirectionalLight3D.new()
+	sun.rotation = Vector3(-0.22, -PI / 2 - 0.4, 0)
+	sun.light_color = Color(1.0, 0.6, 0.35)
+	sun.light_energy = 0.7
+	sun.shadow_enabled = true
+	sun.directional_shadow_max_distance = 60.0
+	add_child(sun)
+	shadow_lights.append(sun)
 
 
 func apply_quality(q: String) -> void:
@@ -157,9 +181,77 @@ func apply_quality(q: String) -> void:
 	Game.say("画質: " + {"low": "低", "mid": "中", "high": "高"}[q])
 
 
+## 朝は自宅の前から（毎日歩いて出社する）
+func _go_home() -> void:
+	player.global_position = OutsideBuilder.HOME_POS
+	player.rotation.y = -PI / 2 - 0.5
+	player.cam.rotation.x = 0.0
+	prep_min = DAY_START
+
+
+func now_min() -> int:
+	if phase == "prep":
+		return int(prep_min)
+	return int(17 * 60 + clampf(day_time / day_length, 0.0, 1.0) * (7 if Game.has("extend") else 6) * 60)
+
+
+func clock_in() -> void:
+	if clocked_in:
+		return
+	clocked_in = true
+	var now := now_min()
+	_clock_in_at = "%02d:%02d" % [now / 60, now % 60]
+	if staff.is_empty():
+		Game.say("出社！入口の横のシフト表で、アルバイトを雇える（E）")
+	else:
+		Game.say("出社！アルバイト%d人もそろっている。仕込みをしたら札をひっくり返して開店しよう" % staff.size())
+
+
+func _prep_clock(dt: float) -> void:
+	if phase != "prep":
+		return
+	prep_min += dt * MIN_PER_SEC
+
+
+## アルバイトを雇う（同じ担当を何人でも）
+func hire(role: String) -> Staff:
+	var st := Staff.new()
+	st.role = role
+	add_child(st)
+	staff.append(st)
+	Game.say("%sのアルバイトを雇った（日給 %s）" % [Game.ROLES[role].name, Game.yen(Game.ROLES[role].wage)])
+	return st
+
+
+func fire(role: String) -> bool:
+	for i in range(staff.size() - 1, -1, -1):
+		if staff[i].role == role:
+			staff[i].leave()
+			staff.remove_at(i)
+			Game.say("%sのアルバイトに辞めてもらった" % Game.ROLES[role].name)
+			return true
+	return false
+
+
+func staff_count(role: String) -> int:
+	return staff.filter(func(x): return x.role == role).size()
+
+
+func wages() -> int:
+	var w := 0
+	for st in staff:
+		w += Game.ROLES[st.role].wage
+	return w
+
+
+func clock_in_text() -> String:
+	return _clock_in_at
+
+
 func open_shop() -> void:
 	if build.active:
 		build.toggle()
+	day_length = 700.0 if Game.has("extend") else 600.0
 	phase = "open"
 	day_time = 0.0
 	_spawn_t = 4.0
@@ -168,6 +260,7 @@ func open_shop() -> void:
 
 
 func _process(dt: float) -> void:
+	_prep_clock(dt)
 	if phase == "open":
 		day_time += dt
 		_spawn_t -= dt
@@ -224,14 +317,24 @@ func record_visit(pay: int, stars: float) -> void:
 
 
 func _clock() -> String:
-	var mins := int(17 * 60 + clampf(day_time / day_length, 0.0, 1.0) * 6 * 60)
+	var mins := now_min()
 	return "%02d:%02d" % [mins / 60, mins % 60]
 
 
 func _update_status() -> void:
 	var ph: String = {"prep": "仕込み中", "open": "営業中", "closing": "閉店作業中", "summary": "閉店"}[phase]
 	var r := Game.rating()
-	hud.set_status("%d日目　%s　%s\n所持金 %s\n評判 %s %.1f\nきれいな皿 %d　ジョッキ %d　洗い物 %d" % [Game.day, _clock() if phase != "prep" else "17:00", ph, Game.yen(Game.money), "★".repeat(int(round(r))) + "☆".repeat(5 - int(round(r))), r, Game.clean_plates, Game.clean_jugs, Game.dirty_plates + Game.dirty_jugs])
+	if not clocked_in and phase != "summary":
+		ph = "出社前（入口のタイムカードを押そう）"
+	var st_line := "アルバイト なし（シフト表で雇える）"
+	if not staff.is_empty():
+		var parts: Array[String] = []
+		for role in Game.ROLES:
+			var n := staff_count(role)
+			if n > 0:
+				parts.append("%s%d" % [Game.ROLES[role].name, n])
+		st_line = "アルバイト " + "・".join(parts)
+	hud.set_status("%d日目　%s　%s\n所持金 %s\n%s\n評判 %s %.1f　%s\nきれいな皿 %d　ジョッキ %d　洗い物 %d" % [Game.day, _clock(), ph, Game.yen(Game.money), st_line, "★".repeat(int(round(r))) + "☆".repeat(5 - int(round(r))), r, Game.level_text(), Game.clean_plates, Game.clean_jugs, Game.dirty_plates + Game.dirty_jugs])
 	var lines: Array[String] = []
 	for i in seats.size():
 		var c := seats[i].customer
@@ -257,7 +360,12 @@ func _show_summary() -> void:
 	for s in day_stars:
 		avg += s
 	avg = avg / maxf(day_stars.size(), 1.0)
-	var t := "%d日目 おつかれさま！\n\n売上　%s\nお客さん　%d人\n今日の評価　%.1f\n仕入れ・炭代を引いた所持金の増減　%s\n\n冷蔵庫の肉は毎朝新しく届きます。" % [Game.day, Game.yen(day_sales), day_visits, avg, Game.yen(Game.money - _start_money)]
+	var t := "%d日目 おつかれさま！\n\n売上　%s\nお客さん　%d人\n今日の評価　%.1f\n" % [Game.day, Game.yen(day_sales), day_visits, avg]
+	var w := wages()
+	if w > 0:
+		Game.add_money(-w)
+		t += "アルバイト代　-%s（%d人）\n" % [Game.yen(w), staff.size()]
+	t += "仕入れ・炭代・アルバイト代を引いた所持金の増減　%s\n" % Game.yen(Game.money - _start_money)
 	hud.show_summary(t)
 
 
@@ -266,6 +374,10 @@ func next_day() -> void:
 		return
 	hud.hide_summary()
 	Game.day += 1
+	clocked_in = false
+	_go_home()
+	for st in staff:
+		st.reset_day()
 	phase = "prep"
 	day_time = 0.0
 	day_sales = 0
@@ -273,7 +385,7 @@ func next_day() -> void:
 	day_stars.clear()
 	_start_money = Game.money
 	sign_board.refresh()
-	var msg := "%d日目の朝。仕込みを始めよう" % Game.day
+	var msg := "%d日目の朝。" % Game.day
 	var waste := Game.discard_expired()
 	if not waste.is_empty():
 		var parts := []
@@ -290,4 +402,5 @@ func next_day() -> void:
 	if i > 0:
 		msg += "\n段ボールが%d箱届いた（厨房の右奥）" % i
 	Game.orders.clear()
+	msg += "\n家を出た。お店でタイムカードを押そう"
 	Game.say(msg)

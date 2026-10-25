@@ -4,6 +4,8 @@ class_name ShopBuilder
 const W := 12.0
 const D := 9.0
 const H := 2.8
+const DOOR_X0 := 3.9
+const DOOR_X1 := 5.3
 
 
 static func build(main) -> void:
@@ -24,7 +26,10 @@ static func build(main) -> void:
 	Build.box(root, Vector3(W, 0.1, D), Vector3(0, -0.05, 0), floor_m)
 	Build.box(root, Vector3(W, 0.1, D), Vector3(0, H + 0.05, 0), ceil_m, false)
 	Build.box(root, Vector3(W, H, 0.1), Vector3(0, H / 2, -D / 2 - 0.05), wall_m)
-	Build.box(root, Vector3(W, H, 0.1), Vector3(0, H / 2, D / 2 + 0.05), wall_m)
+	# 南の壁（入口 x 3.9〜5.3 があいている）
+	Build.box(root, Vector3(DOOR_X0 + W / 2, H, 0.1), Vector3((DOOR_X0 - W / 2) / 2, H / 2, D / 2 + 0.05), wall_m)
+	Build.box(root, Vector3(W / 2 - DOOR_X1, H, 0.1), Vector3((DOOR_X1 + W / 2) / 2, H / 2, D / 2 + 0.05), wall_m)
+	Build.box(root, Vector3(DOOR_X1 - DOOR_X0, H - 2.2, 0.1), Vector3((DOOR_X0 + DOOR_X1) / 2, (H + 2.2) / 2, D / 2 + 0.05), wall_m)
 	Build.box(root, Vector3(0.1, H, D), Vector3(-W / 2 - 0.05, H / 2, 0), wall_m)
 	# 東の壁（隣の区画を買うと取りはらう）
 	var east := Node3D.new()
@@ -33,7 +38,8 @@ static func build(main) -> void:
 	Build.box(east, Vector3(0.1, H, D), Vector3(W / 2 + 0.05, H / 2, 0), wall_m)
 	Build.box(east, Vector3(0.03, 1.0, D), Vector3(W / 2 - 0.015, 0.5, 0), dark_wood, false)
 	# 腰板
-	Build.box(root, Vector3(W, 1.0, 0.03), Vector3(0, 0.5, D / 2 - 0.015), dark_wood, false)
+	Build.box(root, Vector3(DOOR_X0 + W / 2, 1.0, 0.03), Vector3((DOOR_X0 - W / 2) / 2, 0.5, D / 2 - 0.015), dark_wood, false)
+	Build.box(root, Vector3(W / 2 - DOOR_X1, 1.0, 0.03), Vector3((DOOR_X1 + W / 2) / 2, 0.5, D / 2 - 0.015), dark_wood, false)
 	Build.box(root, Vector3(0.03, 1.0, D), Vector3(-W / 2 + 0.015, 0.5, 0), dark_wood, false)
 	# 天井の梁
 	for x in [-4.0, -1.0, 2.0, 5.0]:
@@ -97,8 +103,10 @@ static func _build_kitchen(main, root: Node3D, wood_m: Material) -> void:
 	root.add_child(prep)
 	Build.box(prep, Vector3(2.6, 0.88, 0.7), Vector3(0, 0.44, 0), steel)
 	Build.box(prep, Vector3(2.6, 0.03, 0.7), Vector3(0, 0.895, 0), Build.mat(Color(0.82, 0.83, 0.85), 0.25, 0.9))
-	var cut_board := Build.box(prep, Vector3(0.5, 0.025, 0.35), Vector3(0.3, 0.92, 0.05), Build.mat(Color(0.92, 0.9, 0.84), 0.6))
+	var cut_board := CuttingBoard.new()
+	cut_board.position = Vector3(0.3, 0.91, 0.05)
 	cut_board.rotation.y = 0.05
+	prep.add_child(cut_board)
 	var tab := OrderTablet.new()
 	tab.position = Vector3(1.2, 0.91, 0.15)
 	tab.rotation.y = 0.2
@@ -154,13 +162,18 @@ static func _build_tables(main, root: Node3D, wood_m: Material, dark_wood: Mater
 	for tx in [-3.4, 0.4]:
 		add_table(main, Vector3(tx, 0, 2.6), 0.0)
 	# お品書き
-	var menu := "おしながき\n\n"
-	for c in MeatData.ORDER:
-		menu += "%s　%d円\n" % [MeatData.CUTS[c].name, MeatData.CUTS[c].price]
-	var board := Build.box(root, Vector3(0.04, 1.1, 0.9), Vector3(-5.97, 1.7, 1.2), Build.mat(Color(0.1, 0.08, 0.06), 0.8), false)
-	var l := Build.label(root, menu, Vector3(-5.94, 1.7, 1.2), 64, Color(0.95, 0.92, 0.85))
+	var board := Build.box(root, Vector3(0.04, 1.3, 0.9), Vector3(-5.97, 1.7, 1.2), Build.mat(Color(0.1, 0.08, 0.06), 0.8), false)
+	var l := Build.label(root, menu_text(), Vector3(-5.94, 1.7, 1.2), 56, Color(0.95, 0.92, 0.85))
 	l.rotation.y = PI / 2
 	l.double_sided = false
+	main.menu_label = l
+
+
+static func menu_text() -> String:
+	var menu := "おしながき\n\n"
+	for c in MeatData.menu():
+		menu += "%s　%d円\n" % [MeatData.CUTS[c].name, MeatData.CUTS[c].price]
+	return menu
 
 
 ## 配置モードで動かせる設備にする（size は床に置いたときの幅×奥行き）
@@ -212,6 +225,8 @@ static func expand_east(main) -> void:
 	var cx := (x0 + x1) / 2
 	if root.has_node("EastWall"):
 		root.get_node("EastWall").free()
+	if main.has_node("Outside/EmptyLot"):
+		main.get_node("Outside/EmptyLot").free()
 	var wall_m: Material = main.wall_mat
 	var dark: Material = main.mats.dark
 	Build.box(root, Vector3(ext, 0.1, D), Vector3(cx, -0.05, 0), main.floor_mat)
@@ -240,25 +255,24 @@ static func expand_east(main) -> void:
 
 
 static func _build_entrance(main, root: Node3D, dark_wood: Material) -> void:
-	# 入口の引き戸と暖簾
-	Build.box(root, Vector3(1.4, 2.2, 0.06), Vector3(4.6, 1.1, 4.47), Build.mat(Color(0.2, 0.14, 0.09), 0.6), false)
-	var glass := StandardMaterial3D.new()
-	glass.albedo_color = Color(0.05, 0.07, 0.1, 0.6)
-	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass.roughness = 0.1
-	Build.box(root, Vector3(1.2, 1.4, 0.02), Vector3(4.6, 1.3, 4.43), glass, false)
-	var noren := Build.mat(Color(0.12, 0.13, 0.2), 0.9)
-	for i in 3:
-		Build.box(root, Vector3(0.44, 0.55, 0.01), Vector3(4.15 + i * 0.45, 1.95, 4.38), noren, false)
-	var nl := Build.label(root, "焼 肉", Vector3(4.6, 1.95, 4.37), 140, Color(0.95, 0.93, 0.88))
-	nl.rotation.y = PI
-	nl.double_sided = false
+	# 入口の自動ドア（近づくと左右に開く）
+	var door := AutoDoor.new()
+	door.position = Vector3((DOOR_X0 + DOOR_X1) / 2, 0, D / 2 + 0.05)
+	root.add_child(door)
+	var tc := TimeCard.new()
+	tc.position = Vector3(3.3, 1.35, 4.42)
+	tc.rotation.y = PI
+	root.add_child(tc)
+	var sb := ShiftBoard.new()
+	sb.position = Vector3(1.8, 1.4, 4.43)
+	sb.rotation.y = PI
+	root.add_child(sb)
 	var sign := OpenSign.new()
-	sign.position = Vector3(3.55, 1.35, 4.36)
+	sign.position = Vector3(2.6, 1.35, 4.42)
 	sign.rotation.y = PI
 	root.add_child(sign)
 	main.sign_board = sign
-	# 提灯
+	# 提灯（店内）
 	for x in [3.2, 5.9]:
 		var lan := Build.sphere(root, 0.18, Vector3(x, 2.25, 4.2), Build.glow_mat(Color(1.0, 0.25, 0.1), 1.6))
 		lan.scale = Vector3(1, 1.3, 1)

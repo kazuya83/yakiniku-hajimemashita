@@ -35,6 +35,7 @@ var _expand_btn: Button
 var wall_name := "しっくい"
 var floor_name := "コンクリート"
 var expanded := false
+var _up_btns := {}
 
 
 func _ready() -> void:
@@ -75,8 +76,8 @@ func _ready() -> void:
 func _build_shop(root: Control) -> void:
 	_shop = PanelContainer.new()
 	_shop.set_anchors_preset(Control.PRESET_CENTER)
-	Hud.place(_shop, Vector2(-340, -300))
-	_shop.custom_minimum_size = Vector2(680, 0)
+	Hud.place(_shop, Vector2(-420, -420))
+	_shop.custom_minimum_size = Vector2(840, 0)
 	_shop.add_theme_stylebox_override("panel", Game.hud._box(Color(0.1, 0.12, 0.16, 0.96)))
 	root.add_child(_shop)
 	var v := VBoxContainer.new()
@@ -114,6 +115,19 @@ func _build_shop(root: Control) -> void:
 	v.add_child(_section("広げる"))
 	_expand_btn = Game.hud._button("隣の区画を買って東へ4m広げる %s" % Game.yen(EXPAND_PRICE), func(): expand())
 	v.add_child(_expand_btn)
+	v.add_child(_section("成長（店の格が上がると買える）"))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 6)
+	v.add_child(grid)
+	for k in Game.UPGRADES:
+		var b: Button = Game.hud._button("", func(): buy_upgrade(k))
+		b.add_theme_font_size_override("font_size", 16)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 54)
+		grid.add_child(b)
+		_up_btns[k] = b
 	var note := Label.new()
 	note.text = "2階席は次のアップデートで追加予定"
 	note.add_theme_font_size_override("font_size", 16)
@@ -140,8 +154,56 @@ func open_shop() -> void:
 	_expand_btn.disabled = expanded
 	if expanded:
 		_expand_btn.text = "隣の区画は購入ずみ"
+	for k in _up_btns:
+		var u: Dictionary = Game.UPGRADES[k]
+		var b: Button = _up_btns[k]
+		if Game.has(k):
+			b.text = "%s　購入ずみ" % u.name
+			b.disabled = true
+		elif Game.level() < u.lv:
+			b.text = "%s　（店の格 Lv%d で解放）\n%s" % [u.name, u.lv, u.desc]
+			b.disabled = true
+		else:
+			b.text = "%s　%s\n%s" % [u.name, Game.yen(u.price), u.desc]
+			b.disabled = false
 	_shop.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## 成長要素を買う
+func buy_upgrade(k: String) -> bool:
+	var u: Dictionary = Game.UPGRADES[k]
+	if Game.has(k) or Game.level() < u.lv:
+		return false
+	if Game.money < u.price:
+		Game.say("お金が足りない（%s 必要）" % Game.yen(u.price))
+		return false
+	if k == "dishwasher" and carrying:
+		return false
+	Game.add_money(-u.price)
+	Game.unlocked[k] = true
+	var m = Game.main
+	match k:
+		"touch":
+			for t in m.tables:
+				t.add_touch_panel()
+		"dishwasher":
+			var dw := Dishwasher.new()
+			var p: Player = m.player
+			var at: Vector3 = p.global_position - p.global_transform.basis.z * 1.5
+			dw.position = Vector3(at.x, 0, at.z)
+			m.get_node("Shop").add_child(dw)
+			close_shop()
+			carrying = dw
+			_bought = 0
+			_from_pos = dw.position
+			Game.say("食洗機が届いた。置きたい所で左クリック")
+			return true
+		"premium":
+			m.menu_label.text = ShopBuilder.menu_text()
+	Game.say("「%s」を手に入れた！" % u.name)
+	open_shop()
+	return true
 
 
 func close_shop() -> void:

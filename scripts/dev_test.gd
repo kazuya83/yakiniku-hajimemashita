@@ -56,6 +56,10 @@ func _process(dt: float) -> void:
 	var p: Player = m.player
 	match step:
 		0:
+			_ok(p.global_position.distance_to(OutsideBuilder.HOME_POS) < 0.5, "朝は自宅の前から")
+			_ok(Game.money >= 300000, "資金 ¥300,000 で店長としてスタート")
+			m.clock_in()
+			_ok(m.clocked_in, "タイムカードで出社")
 			g = m.grills[1]
 			var fr: Fridge = _find(Fridge)
 			fr.use(p)
@@ -164,6 +168,7 @@ func _process(dt: float) -> void:
 				Game.add_stock(c, 40)
 			var tb: DiningTable = m.tables[0]
 			var pt := TableParty.new().setup(tb, 2, m.door_pos)
+			pt.ctype = "normal"
 			m.add_child(pt)
 			tb.party = pt
 			m._parties.append(pt)
@@ -208,6 +213,9 @@ func _process(dt: float) -> void:
 			if is_instance_valid(pt) and pt.need == "grate":
 				print("  網交換の依頼")
 				pt.table.grill.grate.dirt = 0.0
+			if is_instance_valid(pt) and pt.need == "fire":
+				print("  炭を足す依頼")
+				pt.table.grill.coal = 1.0
 			if is_instance_valid(pt) and pt.state == "call_bill":
 				print("  食べた枚数 ", pt.eaten, " 平均 ", pt._food_score())
 				pt.on_use(p)
@@ -276,6 +284,7 @@ func _process(dt: float) -> void:
 				var st := Game.stock_count("karubi")
 				m.next_day()
 				_ok(Game.day == 2 and m.phase == "prep", "次の日へ")
+				m.clock_in()
 				var boxes: Array = m.items_root.get_children().filter(func(x): return x is SupplyBox)
 				_ok(boxes.size() == 2, "段ボールが届く")
 				var fr: Fridge = _find(Fridge)
@@ -352,7 +361,150 @@ func _process(dt: float) -> void:
 			var pt: TableParty = get_meta("pt2")
 			if pt.state == "call_order":
 				_ok(true, "広げた所のテーブルにお客さんが座る")
-				get_tree().quit()
+				step = 40
+				t = 0
 			elif t > 150:
 				_ok(false, "新しいテーブルにたどり着かない state=" + pt.state)
+				get_tree().quit()
+		40:
+			# 第5段階：店の格と成長要素
+			m._spawn_t = 99999.0
+			Game.fame = 0.0
+			_ok(Game.level() == 1, "店の格 Lv1 から")
+			Game.add_fame(5.0)
+			Game.fame = 250.0
+			_ok(Game.level() == 4, "星がたまると店の格が上がる: " + Game.level_text())
+			Game.money += 500000
+			var b: BuildMode = m.build
+			for k in ["extend", "touch", "selfcut", "premium"]:
+				_ok(b.buy_upgrade(k) and Game.has(k), "成長要素を買う: " + Game.UPGRADES[k].name)
+			_ok(b.buy_upgrade("dishwasher") and b.carrying is Dishwasher, "食洗機を買う")
+			var dw: Dishwasher = b.carrying
+			b.carrying = null
+			dw.position = Vector3(-2.0, 0, -3.3)
+			_ok(MeatData.menu().size() == 6 and m.menu_label.text.contains("特上カルビ"), "高級部位がメニューに出る")
+			m.hire("clean")
+			_ok(m.staff.size() == 1 and m.wages() == 7000, "片づけ担当のアルバイトを雇う")
+			# 食洗機
+			Game.dirty_plates = 5
+			Game.dirty_jugs = 3
+			var cp := Game.clean_plates
+			_ok(dw.start() and Game.dirty_plates == 0, "食洗機に入れて回す")
+			set_meta("dw", dw)
+			set_meta("cp", cp)
+			# 自家カット
+			Game.blocks["karubi"] = 1
+			var cbd: CuttingBoard = _find(CuttingBoard)
+			cbd.get_hint(p)
+			var st := Game.stock_count("karubi")
+			for i in 200:
+				cbd.hold_use(p, 0.05)
+			_ok(Game.stock_count("karubi") == st + Game.BLOCK_SLICES and Game.blocks["karubi"] == 0, "塊肉を切って在庫が増える")
+			# タッチパネル注文
+			var tb: DiningTable = m.tables[1]
+			_ok(tb.has_node("Touch"), "テーブルにタッチパネルがつく")
+			for c in MeatData.ORDER:
+				Game.add_stock(c, 40)
+			var pt := TableParty.new().setup(tb, 2, m.door_pos)
+			m.add_child(pt)
+			tb.party = pt
+			m._parties.append(pt)
+			set_meta("pt3", pt)
+			step = 41
+			t = 0
+		41:
+			m._spawn_t = 99999.0
+			var pt: TableParty = get_meta("pt3")
+			if pt.state == "wait_food":
+				_ok(not pt.ticket.is_empty(), "タッチパネルで注文が自動で入る: " + pt.ticket_text())
+				var dw: Dishwasher = get_meta("dw")
+				_ok(dw.running > 0.0, "食洗機が動いている")
+				step = 42
+				t = 0
+			elif t > 120:
+				_ok(false, "タッチパネル注文が入らない state=" + pt.state)
+				get_tree().quit()
+		42:
+			m._spawn_t = 99999.0
+			if t > 30.0:
+				_ok(Game.clean_plates >= get_meta("cp") + 5, "食洗機で皿がきれいになる")
+				# アルバイトの片づけ
+				var tb: DiningTable = m.tables[0]
+				var pl := Plate.new()
+				m.items_root.add_child(pl)
+				tb.put_plate(pl)
+				tb.set_dirty()
+				set_meta("tb0", tb)
+				step = 43
+				t = 0
+		43:
+			m._spawn_t = 99999.0
+			var tb: DiningTable = get_meta("tb0")
+			if tb.is_clean():
+				_ok(true, "アルバイトがテーブルを片づけて拭く")
+				# 客タイプ
+				var types := {}
+				for i in 400:
+					types[Game.pick_type(true)] = true
+				_ok(types.size() == 5, "客タイプ（ふつう・常連・団体・クレーマー・食通）が出る: " + str(types.keys()))
+				_ok(Game.type_stars("gourmet", 4.0, 0.9) == 5.0 and Game.type_stars("complainer", 4.0, 0.7) == 3.0, "食通は上手だと星+1、クレーマーは厳しい")
+				m.open_shop()
+				_ok(m.day_length == 700.0, "営業時間が延びる")
+				# 焼き担当とホール担当
+				Game.unlocked.erase("touch")
+				m.hire("cook")
+				m.hire("hall")
+				for c in MeatData.ORDER:
+					Game.add_stock(c, 40)
+				Game.clean_plates += 20
+				var s: Seat = m.seats[2]
+				if s.customer:
+					s.customer.queue_free()
+				var cs := Customer.new().setup(s, "karubi", 2, m.door_pos)
+				m.add_child(cs)
+				s.customer = cs
+				m._customers.append(cs)
+				set_meta("cs", cs)
+				var tb2: DiningTable = m.tables[1]
+				tb2.clear_all()
+				tb2.finish_wipe()
+				var pt := TableParty.new().setup(tb2, 2, m.door_pos)
+				pt.ctype = "normal"
+				m.add_child(pt)
+				tb2.party = pt
+				m._parties.append(pt)
+				set_meta("pt4", pt)
+				set_meta("m4", Game.money)
+				step = 44
+				t = 0
+			elif t > 120:
+				_ok(false, "アルバイトが片づけない job=" + m.staff[0].job)
+				get_tree().quit()
+		44:
+			m._spawn_t = 99999.0
+			var cs = get_meta("cs")
+			if not get_meta("cdone", false) and (not is_instance_valid(cs) or cs.state == "leave"):
+				_ok(is_instance_valid(cs) and cs.by_staff, "焼き担当がカウンターのお客さんに焼いて出す")
+				set_meta("cdone", true)
+			var pt = get_meta("pt4")
+			if not is_instance_valid(pt) or pt.state == "leave":
+				_ok(Game.money > get_meta("m4") and is_instance_valid(pt) and pt.eaten > 0, "ホール担当が注文・配膳・お会計までやる（食べた %d 枚）" % (pt.eaten if is_instance_valid(pt) else -1))
+				var w: int = m.wages()
+				m.day_time = m.day_length
+				set_meta("w", w)
+				step = 45
+				t = 0
+			elif t > 900:
+				_ok(false, "ホール担当でテーブルが回らない state=%s order=%s delivered=%s" % [pt.state, pt.order, pt.delivered])
+				get_tree().quit()
+		45:
+			m._spawn_t = 99999.0
+			if m.phase == "summary":
+				_ok(get_meta("w") == 24000, "閉店後にアルバイト代をはらう")
+				m.next_day()
+				_ok(not m.clocked_in and m.staff.size() == 3, "次の日は家から。アルバイトはお店にいる")
+				_ok(m.fire("cook") and m.staff.size() == 2, "アルバイトに辞めてもらう")
+				get_tree().quit()
+			elif t > 400:
+				_ok(false, "閉店しない phase=" + m.phase)
 				get_tree().quit()

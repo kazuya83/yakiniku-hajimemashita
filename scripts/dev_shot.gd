@@ -3,7 +3,7 @@ extends Node
 
 var out := "/tmp"
 var t := 0.0
-var step := 0
+var step := -2
 
 
 func _ready() -> void:
@@ -26,6 +26,23 @@ func _process(dt: float) -> void:
 	var m = Game.main
 	var p: Player = m.player
 	match step:
+		-2:
+			if t > 2.0:
+				_shot("home_street")
+				p.global_position = Vector3(3.0, 0.05, 12.5)
+				p.rotation.y = 0.15
+				p.cam.rotation.x = 0.08
+				step = -1
+				t = 0
+		-1:
+			if t > 1.5:
+				_shot("facade")
+				m.clock_in()
+				m.hire("cook")
+				m.hire("hall")
+				m.hire("clean")
+				step = 0
+				t = 0
 		0:
 			if t > 1.0:
 				# カウンターの七輪の前に立ち、肉を並べる
@@ -155,4 +172,10 @@ func _process(dt: float) -> void:
 		9:
 			if t > 1.5:
 				_shot("expanded")
+				Game.hud.open_staff()
+				step = 10
+				t = 0
+		10:
+			if t > 1.0:
+				_shot("staff_panel")
 				get_tree().quit()

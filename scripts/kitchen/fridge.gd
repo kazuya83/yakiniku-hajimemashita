@@ -5,6 +5,7 @@ extends Node3D
 const TRAY_POS := {
 	"tan": Vector3(-0.22, 1.33, 0.0), "karubi": Vector3(0.22, 1.33, 0.0),
 	"rosu": Vector3(-0.22, 0.93, 0.0), "harami": Vector3(0.22, 0.93, 0.0),
+	"jo_tan": Vector3(-0.22, 0.53, 0.0), "tokujo_karubi": Vector3(0.22, 0.53, 0.0),
 }
 
 var is_open := false
@@ -33,9 +34,6 @@ func _ready() -> void:
 		t.fridge = self
 		t.position = TRAY_POS[c]
 		add_child(t)
-	# 下の段は飲み物の箱（飾り）
-	for i in 4:
-		Build.box(self, Vector3(0.18, 0.28, 0.3), Vector3(-0.3 + i * 0.2, 0.67, 0.0), Build.mat(Color.from_hsv(0.08 + i * 0.15, 0.5, 0.6), 0.8), false)
 	# 扉（左右）
 	for side in [-1.0, 1.0]:
 		var pivot := Node3D.new()
@@ -94,10 +92,16 @@ func get_hint(p: Player) -> String:
 
 func get_info(_p: Player) -> String:
 	var lines := ["冷蔵庫の在庫"]
-	for c in MeatData.ORDER:
+	for c in MeatData.menu():
 		var n := Game.stock_count(c)
 		var left := Game.stock_days_left(c)
 		lines.append("%s  %d枚%s" % [MeatData.CUTS[c].name, n, ("（期限まであと%d日）" % left) if n > 0 else ""])
+	var bl: Array[String] = []
+	for c in Game.blocks:
+		if Game.blocks[c] > 0:
+			bl.append("%s%d" % [MeatData.CUTS[c].name, Game.blocks[c]])
+	if not bl.is_empty():
+		lines.append("塊肉  " + "・".join(bl) + "（まな板で切る）")
 	lines.append("きれいな皿  %d枚" % Game.clean_plates)
 	return "\n".join(lines)
 
@@ -105,8 +109,12 @@ func get_info(_p: Player) -> String:
 func primary(p: Player, _pos: Vector3, _nrm: Vector3) -> bool:
 	if p.held is SupplyBox:
 		var b: SupplyBox = p.held
-		Game.add_stock(b.cut, b.pieces)
-		Game.say("%s %d枚を冷蔵庫にしまった" % [MeatData.CUTS[b.cut].name, b.pieces])
+		if b.block:
+			Game.blocks[b.cut] = Game.blocks.get(b.cut, 0) + 1
+			Game.say("%sの塊を冷蔵庫にしまった（作業台のまな板で切る）" % MeatData.CUTS[b.cut].name)
+		else:
+			Game.add_stock(b.cut, b.pieces)
+			Game.say("%s %d枚を冷蔵庫にしまった" % [MeatData.CUTS[b.cut].name, b.pieces])
 		b.detach()
 		b.queue_free()
 		return true
