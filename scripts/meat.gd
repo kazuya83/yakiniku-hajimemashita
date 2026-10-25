@@ -77,6 +77,7 @@ func _update_mat() -> void:
 	mat.set_shader_parameter("mark_bottom", clampf((sear[1] - 0.3) * 1.6, 0.0, 1.0))
 	mat.set_shader_parameter("core", core)
 	mat.set_shader_parameter("fat", fat / maxf(data.fat, 0.01))
+	mat.set_shader_parameter("curl_dir", -1.0 if flipped else 1.0)
 
 
 func flip(sticky: bool) -> void:

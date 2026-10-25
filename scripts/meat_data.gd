@@ -88,22 +88,57 @@ static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
 		var z: float = signf(s) * pow(absf(s), 2.0 / e) * d.d * 0.5
 		var k := 1.0 + 0.06 * sin(3.0 * a + ph1) + 0.035 * sin(7.0 * a + ph2)
 		pts.append(Vector2(x * k, z * k))
+	# 上下の面は同心円状に細かく割り、厚みにわずかなムラをつける（焼き縮み・反りを頂点で表すため）
 	var ht: float = d.t * 0.5
+	var rings := 6
+	var noise := FastNoiseLite.new()
+	noise.seed = rng.randi()
+	noise.frequency = 28.0
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for side in [1.0, -1.0]:
+		var grid: Array = []
+		for r in rings + 1:
+			var row: Array[Vector3] = []
+			var f := float(r) / rings
+			for i in n:
+				var p := pts[i] * f
+				# 縁は少し丸める
+				var edge := smoothstep(0.82, 1.0, f)
+				var y := ht * (1.0 + 0.14 * noise.get_noise_2d(p.x, p.y)) * (1.0 - 0.35 * edge * edge)
+				row.append(Vector3(p.x * (1.0 - 0.02 * edge), y * side, p.y * (1.0 - 0.02 * edge)))
+			grid.append(row)
+		for r in rings:
+			for i in n:
+				var j := (i + 1) % n
+				var a0: Vector3 = grid[r][i]
+				var a1: Vector3 = grid[r][j]
+				var b0: Vector3 = grid[r + 1][i]
+				var b1: Vector3 = grid[r + 1][j]
+				var fa := float(r) / rings
+				var fb := float(r + 1) / rings
+				if side > 0:
+					_v(st, a0, fa); _v(st, b0, fb); _v(st, b1, fb)
+					_v(st, a0, fa); _v(st, b1, fb); _v(st, a1, fa)
+				else:
+					_v(st, a0, fa); _v(st, b1, fb); _v(st, b0, fb)
+					_v(st, a0, fa); _v(st, a1, fa); _v(st, b1, fb)
+	# 側面
 	for i in n:
-		var p0 := pts[i]
-		var p1 := pts[(i + 1) % n]
-		var t0 := Vector3(p0.x, ht, p0.y)
-		var t1 := Vector3(p1.x, ht, p1.y)
-		var b0 := Vector3(p0.x, -ht, p0.y)
-		var b1 := Vector3(p1.x, -ht, p1.y)
-		_tri(st, Vector3(0, ht, 0), t0, t1, Vector3.UP)
-		_tri(st, Vector3(0, -ht, 0), b1, b0, Vector3.DOWN)
-		var nrm := Vector3(p1.y - p0.y, 0.0, -(p1.x - p0.x)).normalized()
-		_tri(st, t0, b0, t1, nrm)
-		_tri(st, t1, b0, b1, nrm)
+		var p0 := pts[i] * 0.98
+		var p1 := pts[(i + 1) % n] * 0.98
+		var h0 := ht * 0.65
+		_v(st, Vector3(p0.x, h0, p0.y), 1.0); _v(st, Vector3(p0.x, -h0, p0.y), 1.0); _v(st, Vector3(p1.x, h0, p1.y), 1.0)
+		_v(st, Vector3(p1.x, h0, p1.y), 1.0); _v(st, Vector3(p0.x, -h0, p0.y), 1.0); _v(st, Vector3(p1.x, -h0, p1.y), 1.0)
+	st.generate_normals()
 	return st.commit()
+
+
+## 頂点。UV2.x に中心からの距離（0〜1）を入れて、焼くと縁が反るのに使う
+static func _v(st: SurfaceTool, v: Vector3, f: float) -> void:
+	st.set_uv(Vector2(v.x, v.z) * 5.0)
+	st.set_uv2(Vector2(f, 0.0))
+	st.add_vertex(v)
 
 
 static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, nrm: Vector3) -> void:
