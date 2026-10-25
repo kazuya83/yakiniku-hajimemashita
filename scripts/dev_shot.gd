@@ -102,9 +102,8 @@ func _process(dt: float) -> void:
 		4:
 			if t > 1.0:
 				_shot("kitchen_view")
-				for n in m.get_node("Shop").get_children():
-					if n is Fridge:
-						n.open()
+				for n in m.get_node("Shop").find_children("*", "Fridge", true, false):
+					n.open()
 				p.global_position = Vector3(-4.6, 0.05, -2.6)
 				p.rotation.y = 0.45
 				p.cam.rotation.x = -0.3
@@ -121,4 +120,39 @@ func _process(dt: float) -> void:
 		7:
 			if t > 1.0:
 				_shot("drinks")
+				Game.money += 300000
+				var b: BuildMode = m.build
+				m.phase = "prep"
+				b.toggle()
+				b.expand()
+				b.set_wall("墨色")
+				b.set_floor("木の床")
+				b.close_shop()
+				b.buy("table")
+				b.carrying.position = Vector3(8.0, 0, 2.0)
+				b._valid = true
+				b.place()
+				b.buy("plant")
+				b.carrying.position = Vector3(9.4, 0, 4.0)
+				b._valid = true
+				b.place()
+				b.buy("table")
+				p.global_position = Vector3(2.0, 0.05, 1.0)
+				p.rotation.y = -PI / 2 - 0.3
+				p.cam.rotation.x = -0.35
+				step = 8
+				t = 0
+		8:
+			if t > 1.5:
+				_shot("build_mode")
+				m.build.cancel()
+				m.build.toggle()
+				p.global_position = Vector3(-4.8, 0.05, 0.6)
+				p.rotation.y = -PI / 2 - 0.35
+				p.cam.rotation.x = -0.15
+				step = 9
+				t = 0
+		9:
+			if t > 1.5:
+				_shot("expanded")
 				get_tree().quit()

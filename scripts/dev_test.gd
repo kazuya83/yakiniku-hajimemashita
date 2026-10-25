@@ -31,6 +31,21 @@ func _deliver(pt: TableParty, c: String, fr: Fridge, p: Player) -> void:
 		p.held = null
 
 
+func _find(cls) -> Node:
+	for n in Game.main.get_node("Shop").find_children("*", "", true, false):
+		if is_instance_of(n, cls):
+			return n
+	return null
+
+
+func _put(n: Node3D, pos: Vector3, yaw: float) -> bool:
+	var b: BuildMode = Game.main.build
+	n.position = pos
+	n.rotation.y = yaw
+	b._valid = b.fits(n, pos, yaw)
+	return b.place()
+
+
 func _ok(cond: bool, msg: String) -> void:
 	print(("OK   " if cond else "FAIL ") + msg)
 
@@ -42,10 +57,7 @@ func _process(dt: float) -> void:
 	match step:
 		0:
 			g = m.grills[1]
-			var fr: Fridge
-			for n in m.get_node("Shop").get_children():
-				if n is Fridge:
-					fr = n
+			var fr: Fridge = _find(Fridge)
 			fr.use(p)
 			_ok(fr.is_open, "冷蔵庫の扉が開く")
 			fr.take("karubi", p)
@@ -128,13 +140,8 @@ func _process(dt: float) -> void:
 				g.grate.add_dirt(0.8)
 				g.primary(p, g.global_position, Vector3.UP)
 				_ok(p.held is Grate and g.grate == null, "網を外す")
-				var sink: Sink
-				var cb: CharcoalBox
-				for n in m.get_node("Shop").get_children():
-					if n is Sink:
-						sink = n
-					if n is CharcoalBox:
-						cb = n
+				var sink: Sink = _find(Sink)
+				var cb: CharcoalBox = _find(CharcoalBox)
 				var coal0 := g.coal
 				var gr: Grate = p.held
 				sink.primary(p, sink.global_position, Vector3.UP)
@@ -172,10 +179,7 @@ func _process(dt: float) -> void:
 				Game.hud._ticket_add(pt.order.keys()[0], 1)
 				Game.hud._close_ticket()
 				_ok(not pt.ticket.is_empty(), "伝票に書ける: " + pt.ticket_text())
-				var fr: Fridge
-				for n in m.get_node("Shop").get_children():
-					if n is Fridge:
-						fr = n
+				var fr: Fridge = _find(Fridge)
 				for c in pt.order:
 					for k in pt.order[c]:
 						_deliver(pt, c, fr, p)
@@ -198,10 +202,7 @@ func _process(dt: float) -> void:
 				for c in pt.order:
 					var need: int = pt.order[c] - pt.delivered.get(c, 0)
 					for k in need:
-						var fr: Fridge
-						for n in m.get_node("Shop").get_children():
-							if n is Fridge:
-								fr = n
+						var fr: Fridge = _find(Fridge)
 						_deliver(pt, c, fr, p)
 				print("  追加注文: ", pt.order_text())
 			if is_instance_valid(pt) and pt.need == "grate":
@@ -220,10 +221,7 @@ func _process(dt: float) -> void:
 			var tb: DiningTable = m.tables[0]
 			if t > 30:
 				_ok(not tb.is_clean(), "帰ったあと皿が残る")
-				var sink: Sink
-				for n in m.get_node("Shop").get_children():
-					if n is Sink:
-						sink = n
+				var sink: Sink = _find(Sink)
 				for pl in tb.items.duplicate():
 					pl.primary(p, pl.global_position, Vector3.UP)
 					if p.held is Plate and not p.held.meats.is_empty():
@@ -242,12 +240,10 @@ func _process(dt: float) -> void:
 		20:
 			# ビールを注ぐ
 			var tap: DrinkTap
-			var jr: JugRack
-			for n in m.get_node("Shop").get_children():
-				if n is DrinkTap and n.drink == "beer":
+			for n in Game.main.get_node("Shop").find_children("*", "DrinkTap", true, false):
+				if n.drink == "beer":
 					tap = n
-				if n is JugRack:
-					jr = n
+			var jr: JugRack = _find(JugRack)
 			jr.primary(p, jr.global_position, Vector3.UP)
 			_ok(p.held is Drink, "ジョッキを取る")
 			tap.tilt = 35.0
@@ -282,15 +278,81 @@ func _process(dt: float) -> void:
 				_ok(Game.day == 2 and m.phase == "prep", "次の日へ")
 				var boxes: Array = m.items_root.get_children().filter(func(x): return x is SupplyBox)
 				_ok(boxes.size() == 2, "段ボールが届く")
-				var fr: Fridge
-				for n in m.get_node("Shop").get_children():
-					if n is Fridge:
-						fr = n
+				var fr: Fridge = _find(Fridge)
 				for b in boxes:
 					p.pick(b)
 					fr.primary(p, fr.global_position, Vector3.UP)
 				_ok(Game.stock_count("karubi") == st + 40, "冷蔵庫にしまう")
-				get_tree().quit()
+				step = 30
+				t = 0
 			elif t > 400:
 				_ok(false, "閉店しない phase=" + m.phase)
+				get_tree().quit()
+		30:
+			# お店づくり
+			Game.money += 300000
+			var b: BuildMode = m.build
+			b.toggle()
+			_ok(b.active, "お店づくりモードに入る")
+			var t0: DiningTable = m.tables[0]
+			b.pick(t0)
+			_ok(not _put(t0, Vector3(-2.0, 0, -0.5), 0.0), "カウンターには置けない")
+			_ok(not _put(t0, Vector3(0.4, 0, 2.6), 0.0), "ほかのテーブルには重ねられない")
+			_ok(_put(t0, Vector3(-3.5, 0, 2.5), PI / 2) and b.carrying == null, "テーブルを回して置く")
+			_ok(absf(t0.chairs[0].x - t0.global_position.x) > 0.5, "椅子の位置もいっしょに回る")
+			var fr: Fridge = _find(Fridge)
+			b.pick(fr)
+			_ok(_put(fr, Vector3(-5.25, 0, -2.5), PI / 2), "冷蔵庫を動かす")
+			var money0 := Game.money
+			b.expand()
+			_ok(b.expanded and m.room_max_x > 7.0 and Game.money == money0 - BuildMode.EXPAND_PRICE, "隣の区画を買って広げる")
+			b.buy("table")
+			var nt: DiningTable = b.carrying
+			_ok(nt != null and m.tables.size() == 3, "テーブルを買う")
+			_ok(_put(nt, Vector3(8.0, 0, 1.5), 0.0), "広げた所にテーブルを置く")
+			b.buy("plant")
+			var pl: Node3D = b.carrying
+			_ok(_put(pl, Vector3(-5.5, 0, 4.0), 0.0), "観葉植物を置く")
+			b.set_wall("墨色")
+			b.set_floor("木の床")
+			_ok(b.wall_name == "墨色" and b.floor_name == "木の床", "壁紙と床を変える")
+			b.close_shop()
+			b.toggle()
+			_ok(not b.active, "お店づくりを終える")
+			step = 31
+			t = 0
+		31:
+			if t > 2.0:
+				var map := m.get_world_3d().navigation_map
+				var ok := true
+				for tb in m.tables:
+					for i in tb.chairs.size():
+						var a: Vector3 = tb.chair_approach(i)
+						var pts := NavigationServer3D.map_get_path(map, m.door_pos, a, true)
+						if pts.is_empty() or Vector2(pts[-1].x, pts[-1].z).distance_to(Vector2(a.x, a.z)) > 0.6:
+							ok = false
+							print("  届かない: テーブル", tb.index, " 椅子", i, " ", a, " → ", pts[-1] if not pts.is_empty() else "なし")
+				_ok(ok, "入口からすべての椅子まで歩ける")
+				for s in m.seats:
+					var pts := NavigationServer3D.map_get_path(map, m.door_pos, s.stool_pos + Vector3(0, 0, 0.35), true)
+					ok = ok and not pts.is_empty() and Vector2(pts[-1].x, pts[-1].z).distance_to(Vector2(s.stool_pos.x, s.stool_pos.z + 0.35)) < 0.6
+				_ok(ok, "入口からカウンター席まで歩ける")
+				m.open_shop()
+				m._spawn_t = 99999.0
+				var tb: DiningTable = m.tables[2]
+				var pt := TableParty.new().setup(tb, 4, m.door_pos)
+				m.add_child(pt)
+				tb.party = pt
+				m._parties.append(pt)
+				set_meta("pt2", pt)
+				step = 32
+				t = 0
+		32:
+			m._spawn_t = 99999.0
+			var pt: TableParty = get_meta("pt2")
+			if pt.state == "call_order":
+				_ok(true, "広げた所のテーブルにお客さんが座る")
+				get_tree().quit()
+			elif t > 150:
+				_ok(false, "新しいテーブルにたどり着かない state=" + pt.state)
 				get_tree().quit()

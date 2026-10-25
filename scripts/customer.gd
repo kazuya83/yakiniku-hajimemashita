@@ -29,8 +29,8 @@ func setup(s: Seat, c: String, n: int, door: Vector3) -> Customer:
 	count = n
 	if randf() < 0.55:
 		drink = ["beer", "beer", "highball", "oolong"].pick_random()
-	var lane_z := 0.25
-	path = [Vector3(door.x - 0.3, 0, lane_z), Vector3(s.stool_pos.x, 0, lane_z), s.stool_pos]
+	path = Game.main.nav_path(door, s.stool_pos + Vector3(0, 0, 0.35))
+	path.append(s.stool_pos)
 	return self
 
 
@@ -175,7 +175,7 @@ func _finish(angry: bool) -> void:
 	seat.customer = null
 	state = "leave"
 	_person.stand()
-	path = [Vector3(_person.position.x, 0, 0.25), Vector3(Game.main.door_pos.x - 0.3, 0, 0.25), Game.main.door_pos]
+	path = Game.main.nav_path(_person.position + Vector3(0, 0, 0.35), Game.main.door_pos)
 
 
 func _update_bubble() -> void:

@@ -30,9 +30,8 @@ func setup(t: DiningTable, n: int, door: Vector3) -> TableParty:
 		var p := Person.new()
 		add_child(p)
 		p.position = door + Vector3(randf_range(-0.3, 0.3), 0, randf_range(-0.2, 0.2))
-		var c: Vector3 = t.chairs[i]
-		var lane_z := 4.0 if c.z > t.position.z else 1.2
-		p.path = [Vector3(4.0, 0, lane_z), Vector3(c.x, 0, lane_z), c]
+		p.path = Game.main.nav_path(p.position, t.chair_approach(i))
+		p.path.append(t.chairs[i])
 		p.speed = randf_range(1.1, 1.4)
 		members.append(p)
 	_bubble = Build.label(self, "", Vector3.ZERO, 44)
@@ -335,11 +334,11 @@ func _leave(angry: bool) -> void:
 		if _flip_at.has(m):
 			m.detach()
 			m.queue_free()
-	for m in members:
+	for i in members.size():
+		var m := members[i]
 		m.stand()
-		var door: Vector3 = Game.main.door_pos
-		var lane_z := 4.0 if m.position.z > table.position.z else 1.2
-		m.path = [Vector3(m.position.x, 0, lane_z), Vector3(4.0, 0, lane_z), door]
+		m.path = [table.chair_approach(i)]
+		m.path.append_array(Game.main.nav_path(table.chair_approach(i), Game.main.door_pos))
 	table.party = null
 	table.set_dirty()
 	for d in _drinks.keys():

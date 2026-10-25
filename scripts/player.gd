@@ -59,6 +59,9 @@ func _unhandled_input(e: InputEvent) -> void:
 			if not Game.hud.ticket_open():
 				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			return
+		if Game.main.build.active:
+			Game.main.build.click(e.button_index)
+			return
 		match e.button_index:
 			MOUSE_BUTTON_LEFT:
 				_primary()
@@ -68,7 +71,7 @@ func _unhandled_input(e: InputEvent) -> void:
 				_scroll(1)
 			MOUSE_BUTTON_WHEEL_DOWN:
 				_scroll(-1)
-	elif e.is_action_pressed("use"):
+	elif e.is_action_pressed("use") and not Game.main.build.active:
 		if look_target and look_target.has_method("use"):
 			look_target.use(self)
 
@@ -87,6 +90,10 @@ func _physics_process(dt: float) -> void:
 	if inp.length() > 0.1 and is_on_floor():
 		_bob += dt * spd * 2.6
 		cam.position.y = 1.62 + sin(_bob) * 0.018
+	if Game.main.build.active:
+		look_target = null
+		Game.hud.set_info("")
+		return
 	_update_look()
 	if Input.is_action_pressed("use") and look_target and look_target.has_method("hold_use"):
 		look_target.hold_use(self, dt)

@@ -38,7 +38,7 @@ func _ready() -> void:
 	_cross.size = Vector2(6, 6)
 	_cross.color = Color(1, 1, 1, 0.85)
 	_cross.set_anchors_preset(Control.PRESET_CENTER)
-	_cross.position = Vector2(-3, -3)
+	Hud.place(_cross, Vector2(-3, -3))
 	_cross.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_cross)
 
@@ -57,11 +57,11 @@ func _ready() -> void:
 	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint.size = Vector2(900, 120)
-	_hint.position = Vector2(-450, -170)
+	Hud.place(_hint, Vector2(-450, -170))
 
 	_info_panel = PanelContainer.new()
 	_info_panel.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	_info_panel.position = Vector2(-380, -120)
+	Hud.place(_info_panel, Vector2(-380, -120))
 	_info_panel.custom_minimum_size = Vector2(340, 0)
 	_info_panel.add_theme_stylebox_override("panel", _box(Color(0, 0, 0, 0.55)))
 	_info_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -71,13 +71,14 @@ func _ready() -> void:
 	_toast = _make_label(root, 30)
 	_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_toast.size = Vector2(1000, 60)
-	_toast.position = Vector2(-500, 90)
+	_toast.size = Vector2(900, 60)
+	_toast.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	Hud.place(_toast, Vector2(-450, 110))
 
 	_help = _make_label(root, 19)
 	_help.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_help.position = Vector2(24, -250)
-	_help.text = "WASD: 移動　Shift: 走る　マウス: 見る\n左クリック: つかむ・置く　右クリック: ひっくり返す\nホイール: 火力・部位を変える　E: 使う（長押しで洗う）\nEsc: メニュー　H: この説明を消す"
+	Hud.place(_help, Vector2(24, -280))
+	_help.text = "WASD: 移動　Shift: 走る　マウス: 見る\n左クリック: つかむ・置く　右クリック: ひっくり返す\nホイール: 火力・部位を変える　E: 使う（長押しで洗う）\nB: お店づくり（開店前・閉店後）\nEsc: メニュー　H: この説明を消す"
 
 	_build_pause(root)
 	_build_summary(root)
@@ -108,7 +109,7 @@ func _box(c: Color) -> StyleBoxFlat:
 func _build_pause(root: Control) -> void:
 	_pause = PanelContainer.new()
 	_pause.set_anchors_preset(Control.PRESET_CENTER)
-	_pause.position = Vector2(-220, -200)
+	Hud.place(_pause, Vector2(-220, -200))
 	_pause.custom_minimum_size = Vector2(440, 0)
 	_pause.add_theme_stylebox_override("panel", _box(Color(0.08, 0.05, 0.04, 0.92)))
 	root.add_child(_pause)
@@ -138,7 +139,7 @@ func _build_pause(root: Control) -> void:
 func _build_summary(root: Control) -> void:
 	_summary = PanelContainer.new()
 	_summary.set_anchors_preset(Control.PRESET_CENTER)
-	_summary.position = Vector2(-260, -200)
+	Hud.place(_summary, Vector2(-260, -200))
 	_summary.custom_minimum_size = Vector2(520, 0)
 	_summary.add_theme_stylebox_override("panel", _box(Color(0.08, 0.05, 0.04, 0.94)))
 	root.add_child(_summary)
@@ -155,7 +156,7 @@ func _build_summary(root: Control) -> void:
 func _build_start(root: Control) -> void:
 	_start = PanelContainer.new()
 	_start.set_anchors_preset(Control.PRESET_CENTER)
-	_start.position = Vector2(-330, -260)
+	Hud.place(_start, Vector2(-330, -260))
 	_start.custom_minimum_size = Vector2(660, 0)
 	_start.add_theme_stylebox_override("panel", _box(Color(0.08, 0.05, 0.04, 0.94)))
 	root.add_child(_start)
@@ -181,7 +182,7 @@ func _build_start(root: Control) -> void:
 func _build_ticket(root: Control) -> void:
 	_ticket = PanelContainer.new()
 	_ticket.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	_ticket.position = Vector2(30, -200)
+	Hud.place(_ticket, Vector2(30, -200))
 	_ticket.custom_minimum_size = Vector2(360, 0)
 	var sb := _box(Color(0.96, 0.94, 0.86, 0.97))
 	_ticket.add_theme_stylebox_override("panel", sb)
@@ -224,7 +225,7 @@ func _build_ticket(root: Control) -> void:
 func _build_purchase(root: Control) -> void:
 	_buy = PanelContainer.new()
 	_buy.set_anchors_preset(Control.PRESET_CENTER)
-	_buy.position = Vector2(-330, -240)
+	Hud.place(_buy, Vector2(-330, -240))
 	_buy.custom_minimum_size = Vector2(660, 0)
 	_buy.add_theme_stylebox_override("panel", _box(Color(0.1, 0.12, 0.16, 0.96)))
 	root.add_child(_buy)
@@ -353,8 +354,19 @@ func _close_ticket() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
+## 画面の基準点（アンカー）からのずれで置く。大きさは最小サイズか今の大きさ
+static func place(c: Control, off: Vector2) -> void:
+	var s := c.custom_minimum_size
+	if s == Vector2.ZERO:
+		s = c.size
+	c.offset_left = off.x
+	c.offset_top = off.y
+	c.offset_right = off.x + s.x
+	c.offset_bottom = off.y + s.y
+
+
 func ticket_open() -> bool:
-	return _ticket.visible or _buy.visible
+	return _ticket.visible or _buy.visible or (Game.main.build != null and Game.main.build.shop_open())
 
 
 func _begin() -> void:

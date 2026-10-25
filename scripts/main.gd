@@ -14,6 +14,12 @@ var _parties: Array[TableParty] = []
 var shadow_lights: Array[Light3D] = []
 var sign_board: OpenSign
 var door_pos := Vector3(4.6, 0, 4.1)
+var floor_mat: StandardMaterial3D
+var wall_mat: StandardMaterial3D
+var mats := {}
+var room_max_x := ShopBuilder.W / 2
+var nav: NavigationRegion3D
+var build: BuildMode
 
 var phase := "prep"
 var day_time := 0.0
@@ -34,6 +40,7 @@ func _ready() -> void:
 	items_root.name = "Items"
 	add_child(items_root)
 	ShopBuilder.build(self)
+	_setup_nav()
 	player = Player.new()
 	add_child(player)
 	player.position = Vector3(-0.6, 0.05, -2.9)
@@ -41,6 +48,8 @@ func _ready() -> void:
 	hud = Hud.new()
 	add_child(hud)
 	Game.hud = hud
+	build = BuildMode.new()
+	add_child(build)
 	apply_quality(Game.quality)
 	_start_money = Game.money
 	Game.say("仕込みをしたら、入口の札をEでひっくり返して開店！")
@@ -51,6 +60,43 @@ func _ready() -> void:
 			add_child(load("res://scripts/dev_walk.gd").new())
 		if a == "--test":
 			add_child(load("res://scripts/dev_test.gd").new())
+
+
+## お客さんの歩き道（床のナビメッシュ）。設備を動かしたら作り直す
+func _setup_nav() -> void:
+	var map := get_world_3d().navigation_map
+	NavigationServer3D.map_set_cell_size(map, 0.1)
+	NavigationServer3D.map_set_cell_height(map, 0.1)
+	nav = NavigationRegion3D.new()
+	var nm := NavigationMesh.new()
+	nm.geometry_parsed_geometry_type = NavigationMesh.PARSED_GEOMETRY_STATIC_COLLIDERS
+	nm.geometry_collision_mask = 1
+	nm.geometry_source_geometry_mode = NavigationMesh.SOURCE_GEOMETRY_GROUPS_WITH_CHILDREN
+	nm.geometry_source_group_name = &"navsrc"
+	nm.cell_size = 0.1
+	nm.cell_height = 0.1
+	nm.agent_radius = 0.3
+	nm.agent_height = 1.5
+	nm.agent_max_climb = 0.2
+	nav.navigation_mesh = nm
+	add_child(nav)
+	rebake()
+
+
+func rebake() -> void:
+	nav.bake_navigation_mesh(false)
+
+
+func nav_path(from: Vector3, to: Vector3) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	var map := get_world_3d().navigation_map
+	if NavigationServer3D.map_get_iteration_id(map) > 0:
+		var pts := NavigationServer3D.map_get_path(map, from, to, true)
+		for p in pts:
+			out.append(Vector3(p.x, 0, p.z))
+	if out.is_empty() or out[-1].distance_to(Vector3(to.x, 0, to.z)) > 0.6:
+		out.append(Vector3(to.x, 0, to.z))
+	return out
 
 
 func _setup_input() -> void:
@@ -112,6 +158,8 @@ func apply_quality(q: String) -> void:
 
 
 func open_shop() -> void:
+	if build.active:
+		build.toggle()
 	phase = "open"
 	day_time = 0.0
 	_spawn_t = 4.0

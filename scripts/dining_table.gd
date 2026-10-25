@@ -14,6 +14,7 @@ var _wipe := 0.0
 var _stain: MeshInstance3D
 var chairs: Array[Vector3] = []
 var chair_yaw: Array[float] = []
+var light: OmniLight3D
 
 
 func build(wood_m: Material, dark_wood: Material, steel: Material) -> void:
@@ -32,8 +33,50 @@ func build(wood_m: Material, dark_wood: Material, steel: Material) -> void:
 	for dx in [-0.35, 0.35]:
 		for dz in [-0.75, 0.75]:
 			Build.box(self, Vector3(0.42, 0.45, 0.42), Vector3(dx, 0.225, dz), dark_wood)
-			chairs.append(position + Vector3(dx, 0, dz * 0.97))
-			chair_yaw.append(PI if dz < 0 else 0.0)
+	ShopBuilder._duct(self, Vector3(0, TOP_Y + 0.75, 0), steel)
+	# テーブルの真上の照明（テーブルと一緒に動く）
+	var shade := Build.mat(Color(0.12, 0.09, 0.07), 0.6)
+	var ly := 2.15
+	Build.cyl(self, 0.06, 0.2, 0.14, Vector3(0.45, ly + 0.07, 0), shade, false, 24)
+	Build.sphere(self, 0.04, Vector3(0.45, ly, 0), Build.glow_mat(Color(1.0, 0.75, 0.45), 4.0))
+	Build.cyl(self, 0.006, 0.006, ShopBuilder.H - ly, Vector3(0.45, (ShopBuilder.H + ly) / 2 + 0.06, 0), shade, false, 6)
+	light = OmniLight3D.new()
+	light.position = Vector3(0.45, ly - 0.08, 0)
+	light.light_color = Color(1.0, 0.78, 0.55)
+	light.light_energy = 1.6
+	light.omni_range = 4.0
+	light.omni_attenuation = 1.2
+	light.shadow_enabled = true
+	light.light_size = 0.05
+	add_child(light)
+	add_to_group("placeable")
+	set_meta("pl_name", "テーブル席")
+	set_meta("pl_size", Vector2(1.5, 2.3))
+	set_meta("pl_price", 25000)
+	refresh_chairs()
+
+
+## 椅子の位置（店内の座標）。テーブルを動かしたら呼ぶ
+func refresh_chairs() -> void:
+	chairs.clear()
+	chair_yaw.clear()
+	for dx in [-0.35, 0.35]:
+		for dz in [-0.75, 0.75]:
+			var lp := Vector3(dx, 0, dz * 0.97)
+			chairs.append(global_transform * lp if is_inside_tree() else position + lp.rotated(Vector3.UP, rotation.y))
+			chair_yaw.append((PI if dz < 0 else 0.0) + rotation.y)
+
+
+## 椅子に向かうときに、いったん立つ場所（椅子の外側）
+func chair_approach(i: int) -> Vector3:
+	var c := chairs[i]
+	var out := c - global_position
+	out.y = 0
+	return c + out.normalized() * 0.55
+
+
+func can_move() -> bool:
+	return party == null and items.is_empty()
 
 
 func is_clean() -> bool:
