@@ -111,6 +111,14 @@ func _process(dt: float) -> void:
 		3:
 			if t > 1.0:
 				_shot("shop_view")
+				p.global_position = Vector3(2.4, 0.05, 2.4)
+				p.rotation.y = -PI / 2 + 0.25
+				p.cam.rotation.x = -0.25
+				step = 31
+				t = 0
+		31:
+			if t > 1.0:
+				_shot("register")
 				p.global_position = Vector3(-1.0, 0.05, -2.6)
 				p.rotation.y = 0.0
 				p.cam.rotation.x = -0.2

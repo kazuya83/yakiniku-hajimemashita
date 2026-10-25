@@ -46,6 +46,10 @@ func _put(n: Node3D, pos: Vector3, yaw: float) -> bool:
 	return b.place()
 
 
+func tb_has_party(pt) -> bool:
+	return pt.table.party == pt
+
+
 func _ok(cond: bool, msg: String) -> void:
 	print(("OK   " if cond else "FAIL ") + msg)
 
@@ -134,6 +138,11 @@ func _process(dt: float) -> void:
 				_ok(false, "お客さんが来ない")
 				get_tree().quit()
 		4:
+			if is_instance_valid(c) and c.state == "at_register":
+				var reg: Register = m.register()
+				_ok(reg.waiting() and reg.front() == c, "食べ終わったお客さんがレジに並ぶ（%s）" % Game.yen(c.bill_total()))
+				p.global_position = reg.global_position + Vector3(0, 0.05, -0.8)
+				reg.use(p)
 			if not is_instance_valid(c) or c.state == "leave":
 				_ok(Game.money > get_meta("money0"), "お会計される: " + Game.yen(Game.money - get_meta("money0")))
 				_ok(Game.reviews.size() > 0, "評価がつく: " + str(Game.reviews))
@@ -216,9 +225,11 @@ func _process(dt: float) -> void:
 			if is_instance_valid(pt) and pt.need == "fire":
 				print("  炭を足す依頼")
 				pt.table.grill.coal = 1.0
-			if is_instance_valid(pt) and pt.state == "call_bill":
+			if is_instance_valid(pt) and pt.state == "at_register":
 				print("  食べた枚数 ", pt.eaten, " 平均 ", pt._food_score())
-				pt.on_use(p)
+				var reg: Register = m.register()
+				_ok(reg.front() == pt and not tb_has_party(pt), "テーブル客が席を立ってレジに並ぶ")
+				reg.use(p)
 				_ok(Game.money > get_meta("money1"), "テーブルのお会計: " + Game.yen(Game.money - get_meta("money1")))
 				step = 13
 				t = 0

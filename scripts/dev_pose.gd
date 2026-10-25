@@ -41,6 +41,13 @@ func _ready() -> void:
 		st.mesh = bm
 		st.position = p.position + Vector3(0, 0.225, 0)
 		root.add_child(st)
+	# 比較用：動きを作ったモデルそのもの（元の動きをそのまま再生）
+	for k in [["res://assets/people/anim_idle.glb", 4.2], ["res://assets/people/anim_sit.glb", -4.2]]:
+		var raw: Node3D = (load(k[0]) as PackedScene).instantiate()
+		raw.position = Vector3(k[1], 0, 0)
+		add_child(raw)
+		var ap: AnimationPlayer = raw.find_children("*", "AnimationPlayer", true, false)[0]
+		ap.play(ap.get_animation_list()[0])
 	var meat_mode := OS.get_cmdline_user_args().has("--meat")
 	if meat_mode:
 		for i in MeatData.ORDER.size():
@@ -57,7 +64,7 @@ func _ready() -> void:
 		lamp.light_energy = 1.5
 		add_child(lamp)
 	var cam := Camera3D.new()
-	cam.position = Vector3(0, 1.0, 4.2)
+	cam.position = Vector3(0, 1.0, 6.5)
 	root.add_child(cam)
 	cam.current = true
 	if meat_mode:
@@ -72,7 +79,7 @@ func _process(_dt: float) -> void:
 	if frame == 2:
 		for i in ps.size():
 			if i < 4:
-				ps[i].sit(0.0, -0.38)
+				ps[i].sit(0.0, -0.38) if not OS.get_cmdline_user_args().has("--idle") else null
 		ps[4].raise_hand(true)
 		ps[5].path.append(Vector3(30, 0, 0))
 	if frame > 2 and frame < 200:

@@ -105,8 +105,16 @@ func offer(meats: Array) -> void:
 func _process(dt: float) -> void:
 	_mood_t -= dt
 	match state:
-		"walk_in", "leave":
+		"walk_in", "leave", "to_register":
 			_walk(dt)
+		"at_register":
+			_reg_wait += dt
+			if _reg_wait > 45.0:
+				_reg_wait = 0.0
+				_bill_stars = maxf(_bill_stars - 1.0, 1.0)
+				_say(["まだですか…？", "お会計お願いします！"].pick_random())
+			if Game.main.register() == null:
+				pay_at_register()
 		"waiting", "eating":
 			_seated(dt)
 	_update_bubble()
@@ -115,7 +123,13 @@ func _process(dt: float) -> void:
 func _walk(dt: float) -> void:
 	_person.path = path
 	if _person.walk(dt):
-		if state == "walk_in":
+		if state == "to_register":
+			state = "at_register"
+			_reg_wait = 0.0
+			var reg: Register = Game.main.register()
+			if reg:
+				_person.rotation.y = atan2(-(reg.global_position.x - _person.position.x), -(reg.global_position.z - _person.position.z))
+		elif state == "walk_in":
 			state = "waiting"
 			_person.sit(0.0, -0.2, 0.69)
 			_say(("いつもの、%sを%d枚%s！" if ctype == "regular" else "%sを%d枚%s！") % [MeatData.CUTS[cut].name, count, ("と" + MeatData.DRINKS[drink].name + "ください") if drink != "" else "ください"])
@@ -178,6 +192,18 @@ func _finish(angry: bool) -> void:
 	if drink_served:
 		base += MeatData.DRINKS[drink].price
 	var pay := int(round(base * (0.7 + 0.3 * avg) * Game.type_pay(ctype, avg) / 10.0)) * 10
+	var reg: Register = Game.main.register()
+	if reg and not angry and pay > 0:
+		# レジに並んで払う
+		_bill = pay
+		_bill_stars = stars
+		_say("ごちそうさま！お会計お願いします")
+		seat.clear()
+		seat.customer = null
+		state = "to_register"
+		_person.stand()
+		path = Game.main.nav_path(_person.position + Vector3(0, 0, 0.35), reg.join(self))
+		return
 	if pay > 0:
 		Game.add_money(pay)
 	Game.main.record_visit(pay, stars)
@@ -191,6 +217,40 @@ func _finish(angry: bool) -> void:
 	path = Game.main.nav_path(_person.position + Vector3(0, 0, 0.35), Game.main.door_pos)
 
 
+# ---- レジでお会計 ----
+var _bill := 0
+var _bill_stars := 3.0
+var _reg_wait := 0.0
+
+
+func bill_label() -> String:
+	return "カウンター（%s）" % MeatData.CUTS[cut].name
+
+
+func bill_total() -> int:
+	return _bill
+
+
+func at_register() -> bool:
+	return state == "at_register"
+
+
+func move_in_line(pos: Vector3) -> void:
+	path = Game.main.nav_path(_person.position, pos)
+	if state == "at_register":
+		state = "to_register"
+
+
+func pay_at_register() -> void:
+	Game.add_money(_bill)
+	Game.main.record_visit(_bill, _bill_stars)
+	var st := "★".repeat(int(_bill_stars)) + "☆".repeat(5 - int(_bill_stars))
+	_say("ありがとう！ " + st)
+	Game.say("カウンターのお客さん お会計 %s　評価 %s" % [Game.yen(_bill), st])
+	state = "leave"
+	path = Game.main.nav_path(_person.position, Game.main.door_pos)
+
+
 func _update_bubble() -> void:
 	var t := ""
 	if _mood_t > 0.0:
@@ -198,5 +258,7 @@ func _update_bubble() -> void:
 	elif is_seated():
 		var tag: String = Game.TYPE_NAMES[ctype]
 		t = "%s%s  %d/%d\n%s" % [("【%s】" % tag) if tag != "" else "", order_text(), eaten, count, Game.bar(patience / max_patience, 8)]
+	elif state == "at_register":
+		t = "（お会計待ち %s）" % Game.yen(_bill)
 	_bubble.text = t
 	_bubble.modulate = Color(1, 0.55, 0.45) if is_seated() and patience < max_patience * 0.3 else Color.WHITE

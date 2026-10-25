@@ -272,6 +272,10 @@ static func _build_entrance(main, root: Node3D, dark_wood: Material) -> void:
 	sign.rotation.y = PI
 	root.add_child(sign)
 	main.sign_board = sign
+	# レジ（入口の手前。お客さんは入口側に並び、店員は奥側に立つ）
+	var reg := Register.new()
+	reg.position = Vector3(5.2, 0, 1.6)
+	root.add_child(reg)
 	# 提灯（店内）
 	for x in [3.2, 5.9]:
 		var lan := Build.sphere(root, 0.18, Vector3(x, 2.25, 4.2), Build.glow_mat(Color(1.0, 0.25, 0.1), 1.6))

@@ -42,7 +42,7 @@ func _ready() -> void:
 	_bubble.outline_modulate = Color(0, 0, 0, 0.8)
 	# 運んでいるお盆（ホール担当）
 	_tray = Node3D.new()
-	_tray.position = Vector3(0.0, 1.1, 0.35)
+	_tray.position = Vector3(0.0, 1.1, -0.38 if person.real else 0.35)
 	_tray.visible = false
 	person.model.add_child(_tray)
 	Build.cyl(_tray, 0.17, 0.17, 0.015, Vector3.ZERO, Build.mat(Color(0.15, 0.1, 0.07), 0.6))
@@ -83,6 +83,12 @@ func _front(n: Node3D, d: float = 0.75) -> Vector3:
 func _shop_find(cls: String) -> Node3D:
 	var a := Game.main.get_node("Shop").find_children("*", cls, true, false)
 	return a[0] if not a.is_empty() else null
+
+
+## レジの内側（お客さんの反対側）
+func _behind(reg: Node3D) -> Vector3:
+	var p := reg.global_position - reg.global_transform.basis.z * 0.6
+	return Vector3(p.x, 0, p.z)
 
 
 func _table_spot(t: DiningTable) -> Vector3:
@@ -131,7 +137,8 @@ func _cook(dt: float) -> void:
 				job = ""
 				return
 			_t += dt
-			person.raise_hand(int(_t * 2.0) % 2 == 0)
+			if not person.real:
+				person.raise_hand(int(_t * 2.0) % 2 == 0)
 			if _t >= COOK_TIME:
 				person.raise_hand(false)
 				_serve_counter(c)
@@ -207,6 +214,17 @@ func _hall(dt: float) -> void:
 					g.coal = maxf(g.coal, 0.9)
 					say("網と炭、交換しました！")
 			job = ""
+		"register":
+			var reg: Register = target if is_instance_valid(target) else null
+			if reg == null or not reg.waiting():
+				job = ""
+				return
+			person.rotation.y = atan2(-(reg.global_position.x - person.position.x), -(reg.global_position.z - person.position.z))
+			_t += dt
+			if _t >= 2.5:
+				reg.checkout()
+				say("ありがとうございました！")
+				job = ""
 		"fetch":
 			# 冷蔵庫かドリンク台で用意して、テーブルへ
 			_t += dt
@@ -235,8 +253,15 @@ func _hall(dt: float) -> void:
 				say("お待たせしました！")
 
 
-## ホールで次にやることを決める
+## ホールで次にやることを決める（レジのお会計がいちばん先）
 func _hall_pick() -> void:
+	var reg: Register = Game.main.register()
+	if reg and reg.waiting() and not _claimed(reg):
+		job = "register"
+		target = reg
+		_t = 0.0
+		_go(_behind(reg))
+		return
 	for t in Game.main.tables:
 		var pt: TableParty = t.party
 		if pt == null or _claimed(pt):
@@ -354,7 +379,8 @@ func _clean(dt: float) -> void:
 				job = ""
 				return
 			_t += dt
-			person.raise_hand(int(_t * 3.0) % 2 == 0)
+			if not person.real:
+				person.raise_hand(int(_t * 3.0) % 2 == 0)
 			if _t > 4.0:
 				t.clear_all()
 				t.finish_wipe()

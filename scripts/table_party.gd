@@ -23,6 +23,9 @@ var _ai_t := 2.0
 var _flip_at := {}    # 肉 → ひっくり返す焼き色
 var _flipped_once := {}
 var _plates_given: Array[Plate] = []
+var _bill := 0        # レジで払う金額（食べ終わった時に決まる）
+
+var _reg_wait := 0.0
 
 
 func setup(t: DiningTable, n: int, door: Vector3) -> TableParty:
@@ -68,6 +71,10 @@ func _status_text() -> String:
 			return "%s（届いた %d/%d）" % [order_text(), _sum(delivered), _sum(order)]
 		"call_bill":
 			return "お会計を呼んでいる"
+		"to_register":
+			return "レジへ向かっている"
+		"at_register":
+			return "レジでお会計待ち"
 	return "帰るところ"
 
 
@@ -132,6 +139,8 @@ func _process(dt: float) -> void:
 				_leave(true)
 		"wait_food", "eating":
 			_eat_loop(dt)
+		"to_register", "at_register":
+			_register_loop(dt)
 		"leave":
 			var done := true
 			for m in members:
@@ -344,6 +353,8 @@ func _eat_loop(dt: float) -> void:
 				_touch_order()
 			else:
 				_call("call_order", "追加の注文いいですか？")
+		elif Game.main.register():
+			_go_pay()
 		else:
 			_call("call_bill", "お会計お願いします")
 
@@ -357,18 +368,106 @@ func _food_score() -> float:
 	return s / scores.size()
 
 
-func _pay() -> void:
+func _bill_total() -> int:
 	var total := 0
 	for c in delivered:
 		total += MeatData.item_price(c) * delivered[c]
-	total = int(round(total * (0.85 + 0.15 * _food_score()) * Game.type_pay(ctype, _food_score()) / 10.0)) * 10
-	Game.add_money(total)
+	return int(round(total * (0.85 + 0.15 * _food_score()) * Game.type_pay(ctype, _food_score()) / 10.0)) * 10
+
+
+func _rate() -> float:
 	var stars := clampf(roundf(1.0 + 4.0 * (0.5 * clampf(service, 0.0, 1.0) + 0.5 * _food_score())), 1.0, 5.0)
-	stars = Game.type_stars(ctype, stars, _food_score())
+	return Game.type_stars(ctype, stars, _food_score())
+
+
+## 席でお会計（レジがないとき）
+func _pay() -> void:
+	var total := _bill_total()
+	Game.add_money(total)
+	var stars := _rate()
 	Game.main.record_visit(total, stars)
 	Game.say("テーブル%d お会計 %s　評価 %s" % [table.index, Game.yen(total), _stars(stars)])
 	say("ごちそうさまでした！ " + _stars(stars))
 	_leave(false)
+
+
+# ---- レジでお会計 ----
+var _label := ""
+
+
+## 食べ終わったら席を立って、代表の人がレジに並ぶ（ほかの人は先に店の外へ）
+func _go_pay() -> void:
+	_bill = _bill_total()
+	_label = "テーブル%d（%d名）" % [table.index, members.size()]
+	say("ごちそうさまでした！お会計してきます")
+	_say_t = 4.0
+	state = "to_register"
+	_reg_wait = 0.0
+	var reg: Register = Game.main.register()
+	var spot := reg.join(self)
+	for i in members.size():
+		var m := members[i]
+		m.raise_hand(false)
+		m.stand()
+		m.path = [table.chair_approach(i)]
+		var to: Vector3 = spot if i == 0 else Game.main.door_pos
+		m.path.append_array(Game.main.nav_path(table.chair_approach(i), to))
+	_vacate()
+
+
+func _register_loop(dt: float) -> void:
+	var lead := members[0]
+	for i in range(1, members.size()):
+		var m := members[i]
+		if m.visible and m.walk(dt):
+			m.visible = false   # 先に外で待っている
+	if state == "to_register":
+		if lead.walk(dt):
+			state = "at_register"
+			var reg: Register = Game.main.register()
+			if reg:
+				lead.rotation.y = atan2(-(reg.global_position.x - lead.position.x), -(reg.global_position.z - lead.position.z))
+		return
+	_reg_wait += dt
+	if _reg_wait > 45.0:
+		_reg_wait = 0.0
+		service -= 0.2
+		say(["まだですか…？", "すみませーん、お会計を…", "レジに誰もいないの？"].pick_random())
+	# レジがなくなったら（お店づくりで動かした等）その場で払う
+	if Game.main.register() == null:
+		pay_at_register()
+
+
+func bill_label() -> String:
+	return _label
+
+
+func bill_total() -> int:
+	return _bill
+
+
+func at_register() -> bool:
+	return state == "at_register"
+
+
+func move_in_line(pos: Vector3) -> void:
+	members[0].path = Game.main.nav_path(members[0].position, pos)
+	if state == "at_register":
+		state = "to_register"
+
+
+func pay_at_register() -> void:
+	Game.add_money(_bill)
+	var stars := _rate()
+	Game.main.record_visit(_bill, stars)
+	Game.say("%s お会計 %s　評価 %s" % [_label, Game.yen(_bill), _stars(stars)])
+	say("ごちそうさまでした！ " + _stars(stars))
+	_say_t = 4.0
+	state = "leave"
+	var lead := members[0]
+	lead.path = Game.main.nav_path(lead.position, Game.main.door_pos)
+	for i in range(1, members.size()):
+		members[i].path.clear()
 
 
 func _stars(s: float) -> String:
@@ -387,15 +486,20 @@ func _leave(angry: bool) -> void:
 		Game.main.record_visit(paid, 1.0)
 		Game.say("テーブル%dのお客さんが怒って帰った…" % table.index)
 	state = "leave"
-	for m in table.grill.meats.duplicate():
-		if _flip_at.has(m):
-			m.detach()
-			m.queue_free()
 	for i in members.size():
 		var m := members[i]
 		m.stand()
 		m.path = [table.chair_approach(i)]
 		m.path.append_array(Game.main.nav_path(table.chair_approach(i), Game.main.door_pos))
+	_vacate()
+
+
+## 席を空ける（網の上の自分たちの肉を片づけ、飲みかけは空のジョッキに）
+func _vacate() -> void:
+	for m in table.grill.meats.duplicate():
+		if _flip_at.has(m):
+			m.detach()
+			m.queue_free()
 	table.party = null
 	table.set_dirty()
 	for d in _drinks.keys():
@@ -416,4 +520,6 @@ func _update_bubble() -> void:
 		t = _said
 	elif state == "call_order" or state == "call_bill" or need != "":
 		t = "（呼んでいる）" + Game.bar(patience / 70.0, 8)
+	elif state == "at_register":
+		t = "（お会計待ち %s）" % Game.yen(_bill)
 	_bubble.text = t

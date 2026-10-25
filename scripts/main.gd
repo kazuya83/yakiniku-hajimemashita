@@ -301,6 +301,12 @@ func _spawn_customer() -> void:
 	_customers.append(c)
 
 
+## レジ（お店づくりで動かしていても見つける）。なければ席でお会計
+func register() -> Register:
+	var a := get_tree().get_nodes_in_group("register")
+	return a[0] if not a.is_empty() else null
+
+
 func customer_left(c: Customer) -> void:
 	_customers.erase(c)
 
@@ -351,6 +357,13 @@ func _update_status() -> void:
 			lines.append("テーブル%d: 皿とジョッキを下げてください" % t.index)
 		elif t.party == null and t.dirty:
 			lines.append("テーブル%d: テーブルを拭いてください" % t.index)
+	var reg := register()
+	if reg and not reg.queue.is_empty():
+		var w := 0
+		for q in reg.queue:
+			if is_instance_valid(q) and q.at_register():
+				w += 1
+		lines.append("レジ: %d組がお会計待ち%s" % [reg.queue.size(), "（レジでE）" if w > 0 else "（向かっている）"])
 	hud.set_orders("\n".join(lines))
 
 

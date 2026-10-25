@@ -60,7 +60,9 @@ func _load_real() -> bool:
 	if not ResourceLoader.exists(f):
 		return false
 	var scn: PackedScene = load(f)
-	var inst := scn.instantiate()
+	var inst: Node3D = scn.instantiate()
+	# 3Dモデルは +Z が正面。このゲームの人は -Z を正面にしているので向きを合わせる
+	inst.rotation.y = PI
 	model.add_child(inst)
 	real = true
 	var sk: Skeleton3D = inst.find_children("*", "Skeleton3D", true, false)[0]
@@ -77,7 +79,7 @@ func _load_real() -> bool:
 		w.loop_mode = Animation.LOOP_LINEAR
 		lib.add_animation("walk", w)
 	for k in ANIM_FILES:
-		var a := _clip(k)
+		var a := _clip(k, sk, look)
 		if a:
 			lib.add_animation(k, a)
 	# 頭と腕は見えない目印だけ置く（ほかのスクリプトが位置を使う）
@@ -90,31 +92,92 @@ func _load_real() -> bool:
 	return true
 
 
-## 座る・立ち止まるの動き（1体のモデルで作ったものを、ほかの人にも使い回す）
-static func _clip(k: String) -> Animation:
-	if _clips.has(k):
-		return _clips[k]
+## 座る・立ち止まるの動き（1体のモデルで作ったものを、骨の向きの違うほかの人に合わせ直して使う）
+static func _clip(k: String, sk: Skeleton3D, key: String) -> Animation:
+	var ck := k + "@" + key
+	if _clips.has(ck):
+		return _clips[ck]
 	var a: Animation = null
 	if ResourceLoader.exists(ANIM_FILES[k]):
 		var inst: Node = (load(ANIM_FILES[k]) as PackedScene).instantiate()
 		var ap: AnimationPlayer = inst.find_children("*", "AnimationPlayer", true, false)[0]
+		var src_sk: Skeleton3D = inst.find_children("*", "Skeleton3D", true, false)[0]
 		var lib := ap.get_animation_library("")
 		var src := lib.get_animation(lib.get_animation_list()[0])
-		a = src.duplicate(true)
-		# 体格の違う人に使うので、腰以外の骨の位置は動かさない
-		for t in range(a.get_track_count() - 1, -1, -1):
-			var tp := a.track_get_type(t)
-			var bone := str(a.track_get_path(t)).get_slice(":", 1)
-			if tp == Animation.TYPE_SCALE_3D or (tp == Animation.TYPE_POSITION_3D and bone != "Hips"):
-				a.remove_track(t)
-			elif tp == Animation.TYPE_POSITION_3D:
-				# 腰は高さだけ使い、前後左右は椅子の真ん中に合わせる
-				for kk in a.track_get_key_count(t):
-					var v: Vector3 = a.track_get_key_value(t, kk)
-					a.track_set_key_value(t, kk, Vector3(0, v.y, 0))
-		a.loop_mode = Animation.LOOP_LINEAR
+		a = _retarget(src, src_sk, sk)
 		inst.free()
-	_clips[k] = a
+	_clips[ck] = a
+	return a
+
+
+## 元の動きを「休みの姿勢からどれだけ回したか」に直し、相手の休みの姿勢に当てはめる
+static func _retarget(src: Animation, ssk: Skeleton3D, tsk: Skeleton3D) -> Animation:
+	var rot_tr := {}
+	var hips_pos := -1
+	var track_prefix := ""
+	for t in src.get_track_count():
+		var path := str(src.track_get_path(t))
+		var bone := path.get_slice(":", 1)
+		if track_prefix == "":
+			track_prefix = path.get_slice(":", 0)
+		if src.track_get_type(t) == Animation.TYPE_ROTATION_3D:
+			rot_tr[bone] = t
+		elif src.track_get_type(t) == Animation.TYPE_POSITION_3D and bone == "Hips":
+			hips_pos = t
+	# 時間は腰の回転のキーに合わせる
+	var times: Array[float] = []
+	var ref: int = rot_tr.get("Hips", rot_tr.values()[0])
+	for i in src.track_get_key_count(ref):
+		times.append(src.track_get_key_time(ref, i))
+	var n := tsk.get_bone_count()
+	# 休みの姿勢（スケルトン全体から見た向き）
+	var srest := {}
+	var trest: Array[Quaternion] = []
+	for b in n:
+		var nm := tsk.get_bone_name(b)
+		var tp := tsk.get_bone_parent(b)
+		var tq := tsk.get_bone_rest(b).basis.get_rotation_quaternion()
+		trest.append(trest[tp] * tq if tp >= 0 else tq)
+	for b in ssk.get_bone_count():
+		var sp := ssk.get_bone_parent(b)
+		var sq := ssk.get_bone_rest(b).basis.get_rotation_quaternion()
+		srest[ssk.get_bone_name(b)] = (srest[ssk.get_bone_name(sp)] * sq) if sp >= 0 else sq
+	var a := Animation.new()
+	a.length = src.length
+	a.loop_mode = Animation.LOOP_LINEAR
+	var out := {}
+	for b in n:
+		var tr := a.add_track(Animation.TYPE_ROTATION_3D)
+		a.track_set_path(tr, NodePath("%s:%s" % [track_prefix, tsk.get_bone_name(b)]))
+		out[b] = tr
+	for time in times:
+		var sglob := {}
+		var tglob: Array[Quaternion] = []
+		tglob.resize(n)
+		for b in ssk.get_bone_count():
+			var nm := ssk.get_bone_name(b)
+			var sp := ssk.get_bone_parent(b)
+			var q: Quaternion = src.rotation_track_interpolate(rot_tr[nm], time) if rot_tr.has(nm) else ssk.get_bone_rest(b).basis.get_rotation_quaternion()
+			sglob[nm] = (sglob[ssk.get_bone_name(sp)] * q) if sp >= 0 else q
+		for b in n:
+			var nm := tsk.get_bone_name(b)
+			var tp := tsk.get_bone_parent(b)
+			var g: Quaternion = trest[b]
+			if sglob.has(nm):
+				g = (sglob[nm] * srest[nm].inverse()) * trest[b]
+			tglob[b] = g
+			var local := (tglob[tp].inverse() * g) if tp >= 0 else g
+			a.rotation_track_insert_key(out[b], time, local.normalized())
+	# 腰の高さ（体格に合わせて縮める）。前後左右は椅子の真ん中に合わせる
+	if hips_pos >= 0:
+		var sh := ssk.get_bone_rest(ssk.find_bone("Hips")).origin.y
+		var th := tsk.get_bone_rest(tsk.find_bone("Hips")).origin.y
+		var k := th / sh if sh > 0.001 else 1.0
+		var pt := a.add_track(Animation.TYPE_POSITION_3D)
+		a.track_set_path(pt, src.track_get_path(hips_pos))
+		for i in src.track_get_key_count(hips_pos):
+			var v: Vector3 = src.track_get_key_value(hips_pos, i)
+			a.position_track_insert_key(pt, src.track_get_key_time(hips_pos, i), Vector3(0, v.y * k, 0))
 	return a
 
 
