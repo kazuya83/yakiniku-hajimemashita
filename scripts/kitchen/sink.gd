@@ -49,7 +49,11 @@ func remove_item(n: Node) -> void:
 
 
 func get_hint(p: Player) -> String:
-	var t := "シンク"
+	var t := "シンク（洗い物: 皿 %d / ジョッキ %d）" % [Game.dirty_plates, Game.dirty_jugs]
+	if grate == null and Game.dirty_plates + Game.dirty_jugs > 0:
+		t += "\nE長押し: 洗い物をする"
+	if p.held is Drink:
+		t += "\n左クリック: ジョッキを下げる"
 	if grate:
 		t += "\nE長押し: 網を洗う（汚れ %d%%）" % int(grate.dirt * 100)
 		if p.held == null:
@@ -82,13 +86,36 @@ func primary(p: Player, _pos: Vector3, _nrm: Vector3) -> bool:
 		var pl: Item = p.held
 		pl.detach()
 		pl.queue_free()
-		Game.main.dirty_dishes += 1
+		Game.dirty_plates += 1
+		return true
+	if p.held is Drink:
+		var d: Item = p.held
+		d.detach()
+		d.queue_free()
+		Game.dirty_jugs += 1
 		return true
 	return false
 
 
+var _dish_t := 0.0
+
+
 func hold_use(_p: Player, dt: float) -> void:
 	if grate == null:
+		if Game.dirty_plates + Game.dirty_jugs <= 0:
+			return
+		_washing = 0.15
+		_dish_t += dt
+		if _dish_t >= 0.9:
+			_dish_t = 0.0
+			if Game.dirty_plates > 0:
+				Game.dirty_plates -= 1
+				Game.clean_plates += 1
+			else:
+				Game.dirty_jugs -= 1
+				Game.clean_jugs += 1
+			if Game.dirty_plates + Game.dirty_jugs == 0:
+				Game.say("洗い物おわり！")
 		return
 	_washing = 0.15
 	var before := grate.dirt

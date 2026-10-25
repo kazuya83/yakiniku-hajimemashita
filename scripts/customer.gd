@@ -7,6 +7,8 @@ var state := "walk_in"
 var path: Array[Vector3] = []
 var cut := "karubi"
 var count := 2
+var drink := ""
+var drink_served := false
 var served := 0
 var eaten := 0
 var scores: Array[float] = []
@@ -25,6 +27,8 @@ func setup(s: Seat, c: String, n: int, door: Vector3) -> Customer:
 	_door = door
 	cut = c
 	count = n
+	if randf() < 0.55:
+		drink = ["beer", "beer", "highball", "oolong"].pick_random()
 	var lane_z := 0.25
 	path = [Vector3(door.x - 0.3, 0, lane_z), Vector3(s.stool_pos.x, 0, lane_z), s.stool_pos]
 	return self
@@ -46,7 +50,27 @@ func is_seated() -> bool:
 
 
 func order_text() -> String:
-	return "%s %d枚" % [MeatData.CUTS[cut].name, count]
+	var t := "%s %d枚" % [MeatData.CUTS[cut].name, count]
+	if drink != "":
+		t += "＋" + MeatData.DRINKS[drink].name + ("（済）" if drink_served else "")
+	return t
+
+
+func offer_drink(d: Drink) -> void:
+	if drink == "" or drink_served:
+		_say("飲み物は頼んでないよ")
+		return
+	if d.drink != drink or d.level < 0.2:
+		_say("それじゃないよ")
+		return
+	var s := d.score()
+	scores.append(s)
+	drink_served = true
+	seat.add_drink(d)
+	if drink == "beer":
+		_say("泡がきれい！" if s > 0.8 else ("泡ばっかり…" if d.foam > d.level * 0.6 else "泡が少ないな"))
+	else:
+		_say("ありがとう！" if s > 0.7 else "ちょっと少ないね")
 
 
 func _say(t: String) -> void:
@@ -87,14 +111,14 @@ func _walk(dt: float) -> void:
 		if state == "walk_in":
 			state = "waiting"
 			_person.sit(0.0)
-			_say("%sを%d枚ください！" % [MeatData.CUTS[cut].name, count])
+			_say("%sを%d枚%s！" % [MeatData.CUTS[cut].name, count, ("と" + MeatData.DRINKS[drink].name + "ください") if drink != "" else "ください"])
 		else:
 			Game.main.customer_left(self)
 			queue_free()
 
 
 func _seated(dt: float) -> void:
-	if served < count:
+	if served < count or (drink != "" and not drink_served):
 		patience -= dt * (0.5 if state == "eating" else 1.0)
 		if patience <= 0.0:
 			_say("もう帰る！")
@@ -111,9 +135,7 @@ func _seated(dt: float) -> void:
 			eaten += 1
 			_say(_reaction(m, s))
 			m.queue_free()
-			if eaten >= count:
-				_finish(false)
-	elif served >= count and eaten >= count:
+	elif served >= count and eaten >= count and (drink == "" or drink_served):
 		_finish(false)
 
 
@@ -139,7 +161,10 @@ func _finish(angry: bool) -> void:
 	avg = avg / maxf(scores.size(), 1.0)
 	var stars := 1.0 if angry and scores.is_empty() else clampf(roundf(1.0 + avg * 4.0) - (1.0 if angry else 0.0), 1.0, 5.0)
 	var price: int = MeatData.CUTS[cut].price
-	var pay := int(round(price / 4.0 * 1.5 * eaten * (0.7 + 0.3 * avg) / 10.0)) * 10
+	var base := price / 4.0 * 1.5 * eaten
+	if drink_served:
+		base += MeatData.DRINKS[drink].price
+	var pay := int(round(base * (0.7 + 0.3 * avg) / 10.0)) * 10
 	if pay > 0:
 		Game.add_money(pay)
 	Game.main.record_visit(pay, stars)

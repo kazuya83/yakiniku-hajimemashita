@@ -8,9 +8,27 @@ var c: Customer
 
 
 func _ready() -> void:
+	Game.toast.connect(func(t): print("  [toast] ", t))
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Game.hud._begin.call_deferred()
 	Engine.time_scale = 8.0
+
+
+func _deliver(pt: TableParty, c: String, fr: Fridge, p: Player) -> void:
+	if MeatData.is_drink(c):
+		var d := Drink.new()
+		Game.main.items_root.add_child(d)
+		d.drink = c
+		d.level = 0.7
+		d.foam = 0.25 if c == "beer" else 0.0
+		p.pick(d)
+	else:
+		fr.take(c, p)
+	pt.table.primary(p, pt.table.global_position, Vector3.UP)
+	if p.held:
+		print("  渡せなかった: ", c, " held=", p.held.display_name(), " items=", pt.table.items.size())
+		p.held.detach()
+		p.held = null
 
 
 func _ok(cond: bool, msg: String) -> void:
@@ -28,11 +46,11 @@ func _process(dt: float) -> void:
 			for n in m.get_node("Shop").get_children():
 				if n is Fridge:
 					fr = n
-			fr.selected = 1
-			var money0 := Game.money
 			fr.use(p)
+			_ok(fr.is_open, "冷蔵庫の扉が開く")
+			fr.take("karubi", p)
 			_ok(p.held is Plate and p.held.meats.size() == 4, "冷蔵庫から皿を出す")
-			_ok(Game.money < money0, "仕入れ代が引かれる")
+			_ok(Game.stock_count("karubi") == 12, "在庫が減る")
 			# 皿を作業台に置く
 			p.place_at(g.global_position + Vector3(0.45, 0, 0.05))
 			var pl: Plate = m.items_root.get_children().filter(func(x): return x is Plate)[0]
@@ -47,6 +65,7 @@ func _process(dt: float) -> void:
 			step = 1
 			t = 0
 		1:
+			m._spawn_t = 99999.0
 			if t > 30.0:
 				for me in g.meats:
 					me.secondary(p)
@@ -61,6 +80,12 @@ func _process(dt: float) -> void:
 				step = 3
 				t = 0
 		3:
+			m._spawn_t = 99999.0
+			if m._customers.is_empty():
+				var cs := Customer.new().setup(m.seats[0], "harami", 2, m.door_pos)
+				m.add_child(cs)
+				m.seats[0].customer = cs
+				m._customers.append(cs)
 			for s in m.seats:
 				if s.customer and s.customer.is_seated():
 					c = s.customer
@@ -77,6 +102,15 @@ func _process(dt: float) -> void:
 					p.pick(me)
 					c.seat.primary(p, c.seat.global_position, Vector3.UP)
 				_ok(c.served == c.count, "肉を出す")
+				if c.drink != "":
+					var d := Drink.new()
+					m.items_root.add_child(d)
+					d.drink = c.drink
+					d.level = 0.7
+					d.foam = 0.25 if c.drink == "beer" else 0.0
+					p.pick(d)
+					c.seat.primary(p, c.seat.global_position, Vector3.UP)
+					_ok(c.drink_served, "飲み物を出す")
 				step = 4
 				t = 0
 				set_meta("money0", money0)
@@ -119,6 +153,8 @@ func _process(dt: float) -> void:
 				_ok(false, "お客さんが帰らない state=" + c.state)
 				get_tree().quit()
 		10:
+			for c in MeatData.ORDER:
+				Game.add_stock(c, 40)
 			var tb: DiningTable = m.tables[0]
 			var pt := TableParty.new().setup(tb, 2, m.door_pos)
 			m.add_child(pt)
@@ -142,9 +178,7 @@ func _process(dt: float) -> void:
 						fr = n
 				for c in pt.order:
 					for k in pt.order[c]:
-						fr.selected = MeatData.ORDER.find(c)
-						fr.use(p)
-						pt.table.primary(p, pt.table.global_position, Vector3.UP)
+						_deliver(pt, c, fr, p)
 				_ok(pt.state == "eating", "皿を出すと焼き始める")
 				set_meta("money1", Game.money)
 				step = 12
@@ -153,6 +187,10 @@ func _process(dt: float) -> void:
 				_ok(false, "テーブル客が注文しない state=" + pt.state)
 				get_tree().quit()
 		12:
+			if not is_instance_valid(get_meta("pt")):
+				_ok(false, "テーブル客が途中で帰った")
+				get_tree().quit()
+				return
 			var pt: TableParty = get_meta("pt")
 			if is_instance_valid(pt) and pt.state == "call_order":
 				pt.on_use(p)
@@ -164,9 +202,7 @@ func _process(dt: float) -> void:
 						for n in m.get_node("Shop").get_children():
 							if n is Fridge:
 								fr = n
-						fr.selected = MeatData.ORDER.find(c)
-						fr.use(p)
-						pt.table.primary(p, pt.table.global_position, Vector3.UP)
+						_deliver(pt, c, fr, p)
 				print("  追加注文: ", pt.order_text())
 			if is_instance_valid(pt) and pt.need == "grate":
 				print("  網交換の依頼")
@@ -188,14 +224,50 @@ func _process(dt: float) -> void:
 				for n in m.get_node("Shop").get_children():
 					if n is Sink:
 						sink = n
-				for pl in tb.plates.duplicate():
+				for pl in tb.items.duplicate():
 					pl.primary(p, pl.global_position, Vector3.UP)
-					if not p.held.meats.is_empty():
+					if p.held is Plate and not p.held.meats.is_empty():
 						p.held.meats.clear()
 					sink.primary(p, sink.global_position, Vector3.UP)
-				_ok(tb.is_clean(), "皿を下げる (洗い物 %d)" % m.dirty_dishes)
-				step = 5
+				_ok(not tb.is_clean() and tb.dirty, "皿とジョッキを下げる (洗い物 皿%d ジョッキ%d)" % [Game.dirty_plates, Game.dirty_jugs])
+				for i in 60:
+					tb.hold_use(p, 0.05)
+				_ok(tb.is_clean(), "テーブルを拭く")
+				var cp := Game.clean_plates
+				for i in 200:
+					sink.hold_use(p, 0.05)
+				_ok(Game.clean_plates > cp and Game.dirty_plates == 0, "皿洗い")
+				step = 20
 				t = 0
+		20:
+			# ビールを注ぐ
+			var tap: DrinkTap
+			var jr: JugRack
+			for n in m.get_node("Shop").get_children():
+				if n is DrinkTap and n.drink == "beer":
+					tap = n
+				if n is JugRack:
+					jr = n
+			jr.primary(p, jr.global_position, Vector3.UP)
+			_ok(p.held is Drink, "ジョッキを取る")
+			tap.tilt = 35.0
+			for i in 70:
+				tap.hold_use(p, 0.05)
+			tap.tilt = 5.0
+			for i in 25:
+				tap.hold_use(p, 0.05)
+			var d: Drink = p.held
+			print("  ビール 液%.2f 泡%.2f 点%.2f" % [d.level, d.foam, d.score()])
+			_ok(d.score() > 0.6, "ビールをうまく注げる")
+			p.place_at(Vector3(2.0, 0.95, -1.2))
+			# 発注して翌日届く
+			Game.hud.open_purchase()
+			Game.hud._buy_add("karubi", 2)
+			var money0 := Game.money
+			Game.hud._buy_confirm()
+			_ok(Game.money < money0 and Game.orders.get("karubi", 0) == 2, "発注する")
+			step = 5
+			t = 0
 		5:
 			m.day_time = m.day_length
 			for s in m.seats:
@@ -205,8 +277,19 @@ func _process(dt: float) -> void:
 		6:
 			if m.phase == "summary":
 				_ok(true, "閉店して日報が出る")
+				var st := Game.stock_count("karubi")
 				m.next_day()
 				_ok(Game.day == 2 and m.phase == "prep", "次の日へ")
+				var boxes: Array = m.items_root.get_children().filter(func(x): return x is SupplyBox)
+				_ok(boxes.size() == 2, "段ボールが届く")
+				var fr: Fridge
+				for n in m.get_node("Shop").get_children():
+					if n is Fridge:
+						fr = n
+				for b in boxes:
+					p.pick(b)
+					fr.primary(p, fr.global_position, Vector3.UP)
+				_ok(Game.stock_count("karubi") == st + 40, "冷蔵庫にしまう")
 				get_tree().quit()
 			elif t > 400:
 				_ok(false, "閉店しない phase=" + m.phase)

@@ -69,17 +69,17 @@ func need_text() -> String:
 
 func order_text() -> String:
 	var parts: Array[String] = []
-	for c in MeatData.ORDER:
+	for c in MeatData.ORDER + MeatData.DRINK_ORDER:
 		if order.get(c, 0) > 0:
-			parts.append("%s%d皿" % [MeatData.CUTS[c].name, order[c]])
+			parts.append("%s%d%s" % [MeatData.item_name(c), order[c], "杯" if MeatData.is_drink(c) else "皿"])
 	return "、".join(parts)
 
 
 func ticket_text() -> String:
 	var parts: Array[String] = []
-	for c in MeatData.ORDER:
+	for c in MeatData.ORDER + MeatData.DRINK_ORDER:
 		if ticket.get(c, 0) > 0:
-			parts.append("%s%d" % [MeatData.CUTS[c].name, ticket[c]])
+			parts.append("%s%d" % [MeatData.item_name(c), ticket[c]])
 	return "・".join(parts) if not parts.is_empty() else "（未記入）"
 
 
@@ -153,10 +153,17 @@ func _make_order() -> void:
 	for i in n:
 		var c: String = MeatData.ORDER.pick_random()
 		order[c] = order.get(c, 0) + 1
+	for i in members.size():
+		if randf() < (0.7 if rounds == 0 else 0.3):
+			var d: String = ["beer", "beer", "beer", "highball", "oolong"].pick_random()
+			order[d] = order.get(d, 0) + 1
 	rounds += 1
 
 
-func wants(pl: Plate) -> bool:
+func wants(it: Item) -> bool:
+	if it is Drink:
+		return it.drink != "" and it.level > 0.2 and order.get(it.drink, 0) > delivered.get(it.drink, 0)
+	var pl: Plate = it
 	if pl.meats.is_empty():
 		return false
 	var c := pl.meats[0].cut
@@ -166,12 +173,25 @@ func wants(pl: Plate) -> bool:
 	return order.get(c, 0) > delivered.get(c, 0)
 
 
-func on_plate(pl: Plate) -> void:
-	var c := pl.meats[0].cut
-	delivered[c] = delivered.get(c, 0) + 1
-	_plates_given.append(pl)
+var _drinks := {}   # ジョッキ → 飲み終わるまでの秒数
+
+
+func on_item(it: Item) -> void:
+	if it is Drink:
+		delivered[it.drink] = delivered.get(it.drink, 0) + 1
+		var s: float = it.score()
+		scores.append(s)
+		_drinks[it] = randf_range(25.0, 45.0)
+		if it.drink == "beer":
+			say("かんぱーい！" if s > 0.75 else "泡のバランスがちょっと…")
+		else:
+			say("ありがとうございます！")
+	else:
+		var c: String = it.meats[0].cut
+		delivered[c] = delivered.get(c, 0) + 1
+		_plates_given.append(it)
+		say("ありがとうございます！")
 	state = "eating"
-	say("ありがとうございます！")
 	if patience < 60.0:
 		service -= 0.15
 	patience = maxf(patience, 120.0)
@@ -179,6 +199,23 @@ func on_plate(pl: Plate) -> void:
 
 func _eat_loop(dt: float) -> void:
 	var g := table.grill
+	for d in _drinks.keys():
+		if not is_instance_valid(d) or d.container != table:
+			_drinks.erase(d)
+			continue
+		_drinks[d] -= dt
+		var full: float = d.level + d.foam
+		if full > 0.0:
+			d.level = maxf(d.level - dt * 0.02, 0.0)
+			d.foam = maxf(d.foam - dt * 0.01, 0.0)
+			d.refresh()
+		if _drinks[d] <= 0.0:
+			d.drink = ""
+			d.level = 0.0
+			d.foam = 0.0
+			d.empty_used = true
+			d.refresh()
+			_drinks.erase(d)
 	# 待ち時間（焼く物がないのに注文が届いていない）
 	var raw_left := 0
 	for pl in _plates_given:
@@ -268,7 +305,7 @@ func _food_score() -> float:
 func _pay() -> void:
 	var total := 0
 	for c in delivered:
-		total += MeatData.CUTS[c].price * delivered[c]
+		total += MeatData.item_price(c) * delivered[c]
 	total = int(round(total * (0.85 + 0.15 * _food_score()) / 10.0)) * 10
 	Game.add_money(total)
 	var stars := clampf(roundf(1.0 + 4.0 * (0.5 * clampf(service, 0.0, 1.0) + 0.5 * _food_score())), 1.0, 5.0)
@@ -283,10 +320,12 @@ func _stars(s: float) -> String:
 
 
 func _leave(angry: bool) -> void:
+	if OS.is_debug_build():
+		print("party leave angry=%s state=%s patience=%.1f order=%s delivered=%s" % [angry, state, patience, order, delivered])
 	if angry:
 		var paid := 0
 		for c in delivered:
-			paid += int(MeatData.CUTS[c].price * delivered[c] * 0.5)
+			paid += int(MeatData.item_price(c) * delivered[c] * 0.5)
 		if paid > 0:
 			Game.add_money(paid)
 		Game.main.record_visit(paid, 1.0)
@@ -302,6 +341,14 @@ func _leave(angry: bool) -> void:
 		var lane_z := 4.0 if m.position.z > table.position.z else 1.2
 		m.path = [Vector3(m.position.x, 0, lane_z), Vector3(4.0, 0, lane_z), door]
 	table.party = null
+	table.set_dirty()
+	for d in _drinks.keys():
+		if is_instance_valid(d):
+			d.drink = ""
+			d.level = 0.0
+			d.foam = 0.0
+			d.empty_used = true
+			d.refresh()
 
 
 func _update_bubble() -> void:

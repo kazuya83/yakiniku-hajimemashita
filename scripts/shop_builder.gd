@@ -99,6 +99,23 @@ static func _build_kitchen(main, root: Node3D, wood_m: Material) -> void:
 	var gr := GrateRack.new()
 	gr.position = Vector3(0.75, 0, -4.15)
 	root.add_child(gr)
+	# 飲み物コーナー（カウンター内の右奥）
+	var dc := Build.box(root, Vector3(0.7, 0.9, 1.7), Vector3(2.6, 0.45, -3.15), steel)
+	var kinds := ["beer", "highball", "oolong"]
+	for k in 3:
+		var tap := DrinkTap.new()
+		tap.drink = kinds[k]
+		tap.position = Vector3(2.65, 0.9, -3.75 + k * 0.5)
+		tap.rotation.y = -PI / 2
+		root.add_child(tap)
+	var jr := JugRack.new()
+	jr.position = Vector3(2.55, 0.9, -2.5)
+	root.add_child(jr)
+	var tab := OrderTablet.new()
+	tab.position = Vector3(-2.1, 0.91, -3.95)
+	tab.rotation.y = 0.2
+	root.add_child(tab)
+	Build.label(root, "段ボール置き場", Vector3(3.8, 1.2, -4.44), 56, Color(0.9, 0.85, 0.75))
 	var tr := Trash.new()
 	tr.position = Vector3(1.5, 0, -4.15)
 	root.add_child(tr)
@@ -164,7 +181,7 @@ static func _build_lights(main, root: Node3D) -> void:
 	var spots := [
 		Vector3(-3.6, 2.2, -0.6), Vector3(-1.6, 2.2, -0.6), Vector3(0.4, 2.2, -0.6),
 		Vector3(-3.4, 2.15, 2.6), Vector3(0.4, 2.15, 2.6),
-		Vector3(-3.3, 2.3, -3.6), Vector3(-0.3, 2.3, -3.6), Vector3(3.8, 2.3, 0.5), Vector3(4.2, 2.3, 3.4),
+		Vector3(-3.3, 2.3, -3.6), Vector3(-0.3, 2.3, -3.6), Vector3(3.8, 2.3, 0.5), Vector3(4.2, 2.3, 3.4), Vector3(2.3, 2.3, -3.1), Vector3(-5.0, 2.3, -3.0),
 	]
 	var i := 0
 	for p in spots:

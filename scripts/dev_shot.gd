@@ -102,4 +102,23 @@ func _process(dt: float) -> void:
 		4:
 			if t > 1.0:
 				_shot("kitchen_view")
+				for n in m.get_node("Shop").get_children():
+					if n is Fridge:
+						n.open()
+				p.global_position = Vector3(-4.6, 0.05, -2.6)
+				p.rotation.y = 0.45
+				p.cam.rotation.x = -0.3
+				step = 6
+				t = 0
+		6:
+			if t > 1.5:
+				_shot("fridge_open")
+				p.global_position = Vector3(2.0, 0.05, -2.9)
+				p.rotation.y = -PI / 2
+				p.cam.rotation.x = -0.35
+				step = 7
+				t = 0
+		7:
+			if t > 1.0:
+				_shot("drinks")
 				get_tree().quit()

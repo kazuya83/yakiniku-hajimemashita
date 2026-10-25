@@ -20,6 +20,11 @@ var _ticket_title: Label
 var _ticket_counts := {}
 var _ticket_labels := {}
 var _ticket_party: TableParty
+var _buy: PanelContainer
+var _buy_counts := {}
+var _buy_labels := {}
+var _buy_stock := {}
+var _buy_total: Label
 
 
 func _ready() -> void:
@@ -41,9 +46,11 @@ func _ready() -> void:
 	_status.position = Vector2(24, 18)
 
 	_orders = _make_label(root, 20)
-	_orders.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_orders.position = Vector2(-360, 18)
-	_orders.size = Vector2(340, 200)
+	_orders.anchor_left = 1.0
+	_orders.anchor_right = 1.0
+	_orders.offset_left = -560
+	_orders.offset_right = -24
+	_orders.offset_top = 18
 	_orders.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	_hint = _make_label(root, 22)
@@ -75,6 +82,7 @@ func _ready() -> void:
 	_build_pause(root)
 	_build_summary(root)
 	_build_ticket(root)
+	_build_purchase(root)
 	_build_start(root)
 	Game.toast.connect(show_toast)
 
@@ -186,16 +194,16 @@ func _build_ticket(root: Control) -> void:
 	_ticket_title.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
 	v.add_child(_ticket_title)
 	var note := Label.new()
-	note.text = "聞いた注文を書きこもう（皿の数）"
+	note.text = "聞いた注文を書きこもう（肉は皿、飲み物は杯）"
 	note.add_theme_font_size_override("font_size", 17)
 	note.add_theme_color_override("font_color", Color(0.35, 0.3, 0.25))
 	v.add_child(note)
-	for c in MeatData.ORDER:
+	for c in MeatData.ORDER + MeatData.DRINK_ORDER:
 		var h := HBoxContainer.new()
 		h.add_theme_constant_override("separation", 10)
 		v.add_child(h)
 		var n := Label.new()
-		n.text = MeatData.CUTS[c].name
+		n.text = MeatData.item_name(c)
 		n.custom_minimum_size = Vector2(120, 0)
 		n.add_theme_font_size_override("font_size", 22)
 		n.add_theme_color_override("font_color", Color(0.15, 0.1, 0.05))
@@ -213,10 +221,113 @@ func _build_ticket(root: Control) -> void:
 	_ticket.visible = false
 
 
+func _build_purchase(root: Control) -> void:
+	_buy = PanelContainer.new()
+	_buy.set_anchors_preset(Control.PRESET_CENTER)
+	_buy.position = Vector2(-330, -240)
+	_buy.custom_minimum_size = Vector2(660, 0)
+	_buy.add_theme_stylebox_override("panel", _box(Color(0.1, 0.12, 0.16, 0.96)))
+	root.add_child(_buy)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	_buy.add_child(v)
+	var t := Label.new()
+	t.text = "発注（1箱 = %d枚、翌朝届く。賞味期限は届いてから%d日）" % [Game.BOX_PIECES, Game.SHELF_DAYS]
+	t.add_theme_font_size_override("font_size", 22)
+	v.add_child(t)
+	for c in MeatData.ORDER:
+		var h := HBoxContainer.new()
+		h.add_theme_constant_override("separation", 10)
+		v.add_child(h)
+		var n := Label.new()
+		n.text = "%s　1箱 %s" % [MeatData.CUTS[c].name, Game.yen(Game.box_cost(c))]
+		n.custom_minimum_size = Vector2(230, 0)
+		n.add_theme_font_size_override("font_size", 20)
+		h.add_child(n)
+		var st := Label.new()
+		st.custom_minimum_size = Vector2(170, 0)
+		st.add_theme_font_size_override("font_size", 18)
+		h.add_child(st)
+		_buy_stock[c] = st
+		h.add_child(_button("－", func(): _buy_add(c, -1)))
+		var cnt := Label.new()
+		cnt.custom_minimum_size = Vector2(50, 0)
+		cnt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cnt.add_theme_font_size_override("font_size", 22)
+		h.add_child(cnt)
+		_buy_labels[c] = cnt
+		h.add_child(_button("＋", func(): _buy_add(c, 1)))
+	_buy_total = Label.new()
+	_buy_total.add_theme_font_size_override("font_size", 22)
+	v.add_child(_buy_total)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 12)
+	v.add_child(hb)
+	var ok := _button("発注する", func(): _buy_confirm())
+	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(ok)
+	var cancel := _button("閉じる", func(): _buy_close())
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hb.add_child(cancel)
+	_buy.visible = false
+
+
+func open_purchase() -> void:
+	for c in MeatData.ORDER:
+		_buy_counts[c] = 0
+		_buy_labels[c].text = "0箱"
+		var left := Game.stock_days_left(c)
+		_buy_stock[c].text = "在庫 %d枚%s" % [Game.stock_count(c), ("・あと%d日" % left) if left >= 0 else ""]
+	_buy_refresh()
+	_buy.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _buy_add(c: String, d: int) -> void:
+	_buy_counts[c] = clampi(_buy_counts[c] + d, 0, 9)
+	_buy_labels[c].text = "%d箱" % _buy_counts[c]
+	_buy_refresh()
+
+
+func _buy_cost() -> int:
+	var total := 0
+	for c in _buy_counts:
+		total += Game.box_cost(c) * _buy_counts[c]
+	return total
+
+
+func _buy_refresh() -> void:
+	var pending := []
+	for c in Game.orders:
+		pending.append("%s%d箱" % [MeatData.CUTS[c].name, Game.orders[c]])
+	_buy_total.text = "合計 %s　（所持金 %s）%s" % [Game.yen(_buy_cost()), Game.yen(Game.money), ("\n明日届く予定: " + "・".join(pending)) if not pending.is_empty() else ""]
+
+
+func _buy_confirm() -> void:
+	var cost := _buy_cost()
+	if cost <= 0:
+		_buy_close()
+		return
+	if cost > Game.money:
+		show_toast("お金が足りない")
+		return
+	Game.add_money(-cost)
+	for c in _buy_counts:
+		if _buy_counts[c] > 0:
+			Game.orders[c] = Game.orders.get(c, 0) + _buy_counts[c]
+	show_toast("発注した！明日の朝、段ボールで届きます")
+	_buy_close()
+
+
+func _buy_close() -> void:
+	_buy.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 func open_ticket(party: TableParty) -> void:
 	_ticket_party = party
 	_ticket_counts = {}
-	for c in MeatData.ORDER:
+	for c in MeatData.ORDER + MeatData.DRINK_ORDER:
 		_ticket_counts[c] = 0
 		_ticket_labels[c].text = "0"
 	_ticket_title.text = "伝票　テーブル%d" % party.table.index
@@ -243,7 +354,7 @@ func _close_ticket() -> void:
 
 
 func ticket_open() -> bool:
-	return _ticket.visible
+	return _ticket.visible or _buy.visible
 
 
 func _begin() -> void:

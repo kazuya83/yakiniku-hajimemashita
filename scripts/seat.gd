@@ -4,6 +4,7 @@ extends Node3D
 
 var customer: Customer = null
 var meats: Array[Meat] = []
+var drink_item: Drink = null
 var stool_pos := Vector3.ZERO
 
 
@@ -33,12 +34,28 @@ func add_meat(m: Meat) -> void:
 func remove_item(n: Node) -> void:
 	if n is Meat:
 		meats.erase(n)
+	if n == drink_item:
+		drink_item = null
+
+
+func add_drink(d: Drink) -> void:
+	d.detach()
+	d.reparent(self, false)
+	d.position = Vector3(0.17, 0.0, 0.02)
+	d.rotation = Vector3.ZERO
+	d.container = self
+	d.collision_layer = 0
+	drink_item = d
 
 
 func clear() -> void:
 	for m in meats:
 		m.queue_free()
 	meats.clear()
+	if drink_item:
+		drink_item.queue_free()
+		drink_item = null
+		Game.dirty_jugs += 1
 
 
 func get_hint(p: Player) -> String:
@@ -47,6 +64,8 @@ func get_hint(p: Player) -> String:
 	var t := "お客さんの取り皿（注文: %s）" % customer.order_text()
 	if p.held is Meat or p.held is Plate:
 		t += "\n左クリック: 焼いた肉を出す"
+	elif p.held is Drink:
+		t += "\n左クリック: 飲み物を出す"
 	return t
 
 
@@ -59,5 +78,8 @@ func primary(p: Player, _pos: Vector3, _nrm: Vector3) -> bool:
 	if p.held is Plate:
 		var pl: Plate = p.held
 		customer.offer(pl.meats.duplicate())
+		return true
+	if p.held is Drink:
+		customer.offer_drink(p.held)
 		return true
 	return false

@@ -27,6 +27,29 @@ const CUTS := {
 
 const ORDER := ["tan", "karubi", "rosu", "harami"]
 
+const DRINKS := {
+	"beer": {"name": "生ビール", "price": 550, "color": Color(0.95, 0.62, 0.12, 0.85)},
+	"highball": {"name": "ハイボール", "price": 480, "color": Color(0.95, 0.85, 0.55, 0.55)},
+	"oolong": {"name": "ウーロン茶", "price": 320, "color": Color(0.55, 0.28, 0.08, 0.85)},
+}
+const DRINK_ORDER := ["beer", "highball", "oolong"]
+
+
+static func item_name(k: String) -> String:
+	if CUTS.has(k):
+		return CUTS[k].name
+	return DRINKS[k].name
+
+
+static func item_price(k: String) -> int:
+	if CUTS.has(k):
+		return CUTS[k].price
+	return DRINKS[k].price
+
+
+static func is_drink(k: String) -> bool:
+	return DRINKS.has(k)
+
 
 static func build_mesh(d: Dictionary, seed: float) -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()

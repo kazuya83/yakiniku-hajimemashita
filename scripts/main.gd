@@ -11,7 +11,6 @@ var grills: Array[Grill] = []
 var seats: Array[Seat] = []
 var tables: Array[DiningTable] = []
 var _parties: Array[TableParty] = []
-var dirty_dishes := 0
 var shadow_lights: Array[Light3D] = []
 var sign_board: OpenSign
 var door_pos := Vector3(4.6, 0, 4.1)
@@ -184,7 +183,7 @@ func _clock() -> String:
 func _update_status() -> void:
 	var ph: String = {"prep": "仕込み中", "open": "営業中", "closing": "閉店作業中", "summary": "閉店"}[phase]
 	var r := Game.rating()
-	hud.set_status("%d日目　%s　%s\n所持金 %s\n評判 %s %.1f" % [Game.day, _clock() if phase != "prep" else "17:00", ph, Game.yen(Game.money), "★".repeat(int(round(r))) + "☆".repeat(5 - int(round(r))), r])
+	hud.set_status("%d日目　%s　%s\n所持金 %s\n評判 %s %.1f\nきれいな皿 %d　ジョッキ %d　洗い物 %d" % [Game.day, _clock() if phase != "prep" else "17:00", ph, Game.yen(Game.money), "★".repeat(int(round(r))) + "☆".repeat(5 - int(round(r))), r, Game.clean_plates, Game.clean_jugs, Game.dirty_plates + Game.dirty_jugs])
 	var lines: Array[String] = []
 	for i in seats.size():
 		var c := seats[i].customer
@@ -197,8 +196,10 @@ func _update_status() -> void:
 			if not pt.ticket.is_empty():
 				line += "\n　伝票: " + pt.ticket_text()
 			lines.append(line)
-		elif t.party == null and not t.is_clean():
-			lines.append("テーブル%d: 皿を下げてください" % t.index)
+		elif t.party == null and not t.items.is_empty():
+			lines.append("テーブル%d: 皿とジョッキを下げてください" % t.index)
+		elif t.party == null and t.dirty:
+			lines.append("テーブル%d: テーブルを拭いてください" % t.index)
 	hud.set_orders("\n".join(lines))
 
 
@@ -224,4 +225,21 @@ func next_day() -> void:
 	day_stars.clear()
 	_start_money = Game.money
 	sign_board.refresh()
-	Game.say("%d日目の朝。仕込みを始めよう" % Game.day)
+	var msg := "%d日目の朝。仕込みを始めよう" % Game.day
+	var waste := Game.discard_expired()
+	if not waste.is_empty():
+		var parts := []
+		for c in waste:
+			parts.append("%s%d枚" % [MeatData.CUTS[c].name, waste[c]])
+		msg += "\n賞味期限切れで廃棄: " + "・".join(parts)
+	var i := 0
+	for c in Game.orders:
+		for k in Game.orders[c]:
+			var b := SupplyBox.new().setup(c)
+			items_root.add_child(b)
+			b.global_position = Vector3(3.3 + (i % 3) * 0.48, (i / 3) * 0.25, -3.95)
+			i += 1
+	if i > 0:
+		msg += "\n段ボールが%d箱届いた（厨房の右奥）" % i
+	Game.orders.clear()
+	Game.say(msg)
