@@ -8,6 +8,8 @@ var c: Customer
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	Game.hud._begin.call_deferred()
 	Engine.time_scale = 8.0
 
 
@@ -118,6 +120,9 @@ func _process(dt: float) -> void:
 				get_tree().quit()
 		5:
 			m.day_time = m.day_length
+			for s in m.seats:
+				if s.customer:
+					s.customer.patience = 0.0
 			step = 6
 		6:
 			if m.phase == "summary":

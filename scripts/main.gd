@@ -34,7 +34,7 @@ func _ready() -> void:
 	ShopBuilder.build(self)
 	player = Player.new()
 	add_child(player)
-	player.position = Vector3(-1.6, 0.05, -2.4)
+	player.position = Vector3(-0.6, 0.05, -2.9)
 	player.rotation.y = PI
 	hud = Hud.new()
 	add_child(hud)
@@ -45,21 +45,28 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			add_child(load("res://scripts/dev_shot.gd").new())
+		if a == "--walk":
+			add_child(load("res://scripts/dev_walk.gd").new())
 		if a == "--test":
 			add_child(load("res://scripts/dev_test.gd").new())
 
 
 func _setup_input() -> void:
 	var keys := {
-		"move_f": KEY_W, "move_b": KEY_S, "move_l": KEY_A, "move_r": KEY_D,
-		"sprint": KEY_SHIFT, "use": KEY_E, "pause": KEY_ESCAPE, "help": KEY_H, "next_day": KEY_ENTER,
+		"move_f": [KEY_W, KEY_UP], "move_b": [KEY_S, KEY_DOWN], "move_l": [KEY_A, KEY_LEFT], "move_r": [KEY_D, KEY_RIGHT],
+		"sprint": [KEY_SHIFT], "use": [KEY_E], "pause": [KEY_ESCAPE], "help": [KEY_H], "next_day": [KEY_ENTER, KEY_KP_ENTER],
 	}
 	for a in keys:
 		if not InputMap.has_action(a):
 			InputMap.add_action(a)
+		for k in keys[a]:
+			# 配列（物理キー）と文字（キーボード配列どおり）の両方で受け付ける
 			var ev := InputEventKey.new()
-			ev.physical_keycode = keys[a]
+			ev.physical_keycode = k
 			InputMap.action_add_event(a, ev)
+			var ev2 := InputEventKey.new()
+			ev2.keycode = k
+			InputMap.action_add_event(a, ev2)
 
 
 func _build_environment() -> void:

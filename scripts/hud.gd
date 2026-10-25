@@ -14,6 +14,7 @@ var _pause: PanelContainer
 var _summary: PanelContainer
 var _summary_label: Label
 var _orders: Label
+var _start: PanelContainer
 
 
 func _ready() -> void:
@@ -68,6 +69,7 @@ func _ready() -> void:
 
 	_build_pause(root)
 	_build_summary(root)
+	_build_start(root)
 	Game.toast.connect(show_toast)
 
 
@@ -136,6 +138,38 @@ func _build_summary(root: Control) -> void:
 	_summary.visible = false
 
 
+func _build_start(root: Control) -> void:
+	_start = PanelContainer.new()
+	_start.set_anchors_preset(Control.PRESET_CENTER)
+	_start.position = Vector2(-330, -260)
+	_start.custom_minimum_size = Vector2(660, 0)
+	_start.add_theme_stylebox_override("panel", _box(Color(0.08, 0.05, 0.04, 0.94)))
+	root.add_child(_start)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	_start.add_child(v)
+	var t := Label.new()
+	t.text = "焼肉屋はじめました"
+	t.add_theme_font_size_override("font_size", 40)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(t)
+	var d := Label.new()
+	d.add_theme_font_size_override("font_size", 21)
+	d.text = "WASD（または矢印キー）: 歩く　Shift: 走る　マウス: 見まわす\n左クリック: つかむ・置く　右クリック: 肉をひっくり返す\nホイール: 七輪の火力・冷蔵庫の部位　E: 使う（長押しで網を洗う）\nEsc: メニュー・画質\n\n1. 奥の冷蔵庫で肉を出す\n2. カウンターの七輪で焼く\n3. 入口の札をEで開店\n4. お客さんの取り皿に、注文の肉を焼いて出す"
+	v.add_child(d)
+	var b := _button("はじめる（クリック）", func(): _begin())
+	v.add_child(b)
+	get_tree().paused = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	b.grab_focus.call_deferred()
+
+
+func _begin() -> void:
+	_start.visible = false
+	get_tree().paused = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 func _button(text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -146,7 +180,7 @@ func _button(text: String, cb: Callable) -> Button:
 
 
 func toggle_pause() -> void:
-	if _summary.visible:
+	if _summary.visible or _start.visible:
 		return
 	var p := not get_tree().paused
 	get_tree().paused = p

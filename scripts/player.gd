@@ -34,7 +34,6 @@ func _ready() -> void:
 	hold.position = Vector3(0.14, -0.2, -0.42)
 	cam.add_child(hold)
 	_build_tongs()
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _build_tongs() -> void:

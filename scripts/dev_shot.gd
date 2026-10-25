@@ -8,6 +8,8 @@ var step := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	Game.hud._begin.call_deferred()
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shot="):
 			out = a.substr(7)
