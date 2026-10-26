@@ -253,6 +253,8 @@ func on_item(it: Item) -> void:
 		_plates_given.append(it)
 		say("ありがとうございます！")
 	state = "eating"
+	for m in members:
+		m.eating = true
 	if patience < 60.0:
 		service -= 0.15
 	patience = maxf(patience, 120.0)

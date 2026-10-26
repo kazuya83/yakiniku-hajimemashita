@@ -12,6 +12,8 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Game.hud._begin.call_deferred()
 	Engine.time_scale = 8.0
+	if Game.has_meta("savetest"):
+		step = 90
 
 
 func _deliver(pt: TableParty, c: String, fr: Fridge, p: Player) -> void:
@@ -508,6 +510,20 @@ func _process(dt: float) -> void:
 			elif t > 900:
 				_ok(false, "ホール担当でテーブルが回らない state=%s order=%s delivered=%s" % [pt.state, pt.order, pt.delivered])
 				get_tree().quit()
+		90:
+			if t < 0.5:
+				return
+			var exp: Dictionary = Game.get_meta("savetest")
+			var ok := SaveData.load_into(m)
+			_ok(ok and Game.money == exp.money and Game.day == exp.day, "セーブを読み込む（所持金・日付）money=%d day=%d" % [Game.money, Game.day])
+			_ok(m.staff.size() == exp.staff, "アルバイトも続きから（%d人）" % m.staff.size())
+			var tx := -999.0
+			for tb in m.tables:
+				if is_instance_valid(tb) and not tb.is_queued_for_deletion():
+					tx = tb.position.x if absf(tb.position.x - exp.tx) < 0.01 else tx
+			_ok(m.tables.size() == exp.tables and absf(tx - exp.tx) < 0.01, "テーブルの配置も続きから")
+			_ok(is_equal_approx(Game.fame, exp.fame), "店の格のポイントも続きから")
+			get_tree().quit()
 		45:
 			m._spawn_t = 99999.0
 			if m.phase == "summary":
@@ -515,7 +531,16 @@ func _process(dt: float) -> void:
 				m.next_day()
 				_ok(not m.clocked_in and m.staff.size() == 3, "次の日は家から。アルバイトはお店にいる")
 				_ok(m.fire("cook") and m.staff.size() == 2, "アルバイトに辞めてもらう")
-				get_tree().quit()
+				# セーブ → 読み込みの確認（シーンを読み直して続きから）
+				var tb0: DiningTable = m.tables[0]
+				tb0.position.x += 0.25
+				Game.money += 1234
+				SaveData.save(m, false)
+				Game.set_meta("savetest", {"money": Game.money, "day": Game.day, "staff": m.staff.size(),
+					"tables": m.tables.size(), "tx": tb0.position.x, "fame": Game.fame})
+				Game.money = 1
+				Game.day = 99
+				get_tree().reload_current_scene()
 			elif t > 400:
 				_ok(false, "閉店しない phase=" + m.phase)
 				get_tree().quit()

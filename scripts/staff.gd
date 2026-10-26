@@ -42,7 +42,7 @@ func _ready() -> void:
 	_bubble.outline_modulate = Color(0, 0, 0, 0.8)
 	# 運んでいるお盆（ホール担当）
 	_tray = Node3D.new()
-	_tray.position = Vector3(0.0, 1.1, -0.38 if person.real else 0.35)
+	_tray.position = Vector3(0.0, 1.0, -0.42) if person.real else Vector3(0.0, 1.1, 0.35)
 	_tray.visible = false
 	person.model.add_child(_tray)
 	Build.cyl(_tray, 0.17, 0.17, 0.015, Vector3.ZERO, Build.mat(Color(0.15, 0.1, 0.07), 0.6))
@@ -96,6 +96,9 @@ func _table_spot(t: DiningTable) -> Vector3:
 
 
 func _process(dt: float) -> void:
+	if person.pose:
+		person.pose.carry = _tray.visible
+		person.pose.work = true
 	_say_t -= dt
 	_bubble.text = _said if _say_t > 0.0 else ""
 	if _leaving:

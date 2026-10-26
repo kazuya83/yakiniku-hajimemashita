@@ -98,6 +98,7 @@ func offer(meats: Array) -> void:
 		took += 1
 	if took > 0:
 		state = "eating"
+		_person.eating = true
 		if served >= count:
 			_say("ありがとう！")
 

@@ -379,13 +379,20 @@ func _show_summary() -> void:
 		Game.add_money(-w)
 		t += "アルバイト代　-%s（%d人）\n" % [Game.yen(w), staff.size()]
 	t += "仕入れ・炭代・アルバイト代を引いた所持金の増減　%s\n" % Game.yen(Game.money - _start_money)
+	t += "（ここまでを自動でセーブした）\n"
 	hud.show_summary(t)
+	SaveData.save(self, true)
 
 
 func next_day() -> void:
 	if not hud.summary_visible():
 		return
 	hud.hide_summary()
+	_morning()
+
+
+## 次の日の朝：日付を進め、期限切れを捨て、発注した段ボールを届ける
+func _morning() -> void:
 	Game.day += 1
 	clocked_in = false
 	_go_home()
@@ -417,3 +424,15 @@ func next_day() -> void:
 	Game.orders.clear()
 	msg += "\n家を出た。お店でタイムカードを押そう"
 	Game.say(msg)
+	SaveData.save(self, false)
+
+
+## セーブを読み込んだあと。閉店後のセーブなら次の日の朝から始める
+func loaded_from_save(morning_pending: bool) -> void:
+	if morning_pending:
+		_morning()
+	else:
+		_start_money = Game.money
+		sign_board.refresh()
+		Game.say("%d日目の朝から続き。家を出た。お店でタイムカードを押そう" % Game.day)
+		SaveData.save(self, false)

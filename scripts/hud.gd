@@ -179,11 +179,17 @@ func _build_start(root: Control) -> void:
 	d.add_theme_font_size_override("font_size", 21)
 	d.text = "WASD・↑↓: 歩く　← →: 向きを変える　Shift: 走る　マウス: 見まわす\n左クリック: つかむ・置く　右クリック: 肉をひっくり返す\nホイール: 七輪の火力・冷蔵庫の部位　E: 使う（長押しで網を洗う）\nEsc: メニュー・画質　B: お店づくり\n\nあなたは焼肉屋の店長。資金 ¥300,000 でスタート。\n1. 家から向かいのお店へ歩き、入口のタイムカードをEで押して出社\n2. 入口横のシフト表（E）でアルバイトを雇える\n　 焼き担当・ホール担当・片づけ担当にまかせるほど楽になる\n3. 札をEでひっくり返して開店。自分でも焼いて運んで、お店を育てよう"
 	v.add_child(d)
-	var b := _button("はじめる（クリック）", func(): _begin())
+	var b := _button("はじめから", func(): _begin())
+	if SaveData.exists():
+		var c := _button("続きから（%s）" % SaveData.summary(), func(): _continue())
+		v.add_child(c)
+		c.grab_focus.call_deferred()
+		b.text = "はじめから（セーブは次の閉店後に上書きされる）"
+	else:
+		b.grab_focus.call_deferred()
 	v.add_child(b)
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	b.grab_focus.call_deferred()
 
 
 func _build_staff(root: Control) -> void:
@@ -466,6 +472,12 @@ static func place(c: Control, off: Vector2) -> void:
 
 func ticket_open() -> bool:
 	return _ticket.visible or _buy.visible or _staff.visible or (Game.main.build != null and Game.main.build.shop_open())
+
+
+func _continue() -> void:
+	if not SaveData.load_into(Game.main):
+		Game.say("セーブを読み込めなかった。はじめから始めます")
+	_begin()
 
 
 func _begin() -> void:

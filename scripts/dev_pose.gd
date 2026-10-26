@@ -32,6 +32,7 @@ func _ready() -> void:
 		var p := Person.new()
 		p.look = looks[i]
 		p.position = Vector3(-3.0 + i * 1.2, 0, 0)
+		p.rotation.y = PI
 		root.add_child(p)
 		ps.append(p)
 		# 椅子（店と同じ高さ 0.45）
@@ -41,13 +42,6 @@ func _ready() -> void:
 		st.mesh = bm
 		st.position = p.position + Vector3(0, 0.225, 0)
 		root.add_child(st)
-	# 比較用：動きを作ったモデルそのもの（元の動きをそのまま再生）
-	for k in [["res://assets/people/anim_idle.glb", 4.2], ["res://assets/people/anim_sit.glb", -4.2]]:
-		var raw: Node3D = (load(k[0]) as PackedScene).instantiate()
-		raw.position = Vector3(k[1], 0, 0)
-		add_child(raw)
-		var ap: AnimationPlayer = raw.find_children("*", "AnimationPlayer", true, false)[0]
-		ap.play(ap.get_animation_list()[0])
 	var meat_mode := OS.get_cmdline_user_args().has("--meat")
 	if meat_mode:
 		for i in MeatData.ORDER.size():
@@ -72,6 +66,13 @@ func _ready() -> void:
 		cam.look_at.call_deferred(Vector3(0, 0.6, 0))
 	else:
 		cam.look_at.call_deferred(Vector3(0, 0.7, 0))
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--focus="):
+			# 1人に寄って撮る（--focus=0..5）
+			var x := -3.0 + int(a.substr(8)) * 1.2
+			cam.position = Vector3(x, 1.1, 2.2)
+			cam.fov = 50
+			cam.look_at.call_deferred(Vector3(x, 0.85, 0))
 
 
 func _process(_dt: float) -> void:
@@ -79,8 +80,11 @@ func _process(_dt: float) -> void:
 	if frame == 2:
 		for i in ps.size():
 			if i < 4:
-				ps[i].sit(0.0, -0.38) if not OS.get_cmdline_user_args().has("--idle") else null
-		ps[4].raise_hand(true)
+				ps[i].sit(PI, -0.38) if not OS.get_cmdline_user_args().has("--idle") else null
+		ps[3].raise_hand(true)
+		ps[1].eating = true
+		ps[4].pose.work = true
+		ps[5].pose.carry = true
 		ps[5].path.append(Vector3(30, 0, 0))
 	if frame > 2 and frame < 200:
 		ps[5].walk(0.0)
